@@ -22,6 +22,11 @@ The budget specialist can also run as its own **A2A** service
 (`budget_service.py`); `trip_concierge/a2a_agent.py` is a coordinator that calls
 it remotely via `RemoteA2aAgent` while keeping `guide` and `planner` local.
 
+A **RAG** destination expert (`trip_concierge/rag_agent.py`) answers from a small
+set of curated guides in `data/guides/`, retrieving passages with a
+dependency-free TF-IDF retriever (`trip_concierge/rag.py`) and citing the source
+of each claim.
+
 ## Quick start
 
 ```bash
@@ -33,6 +38,9 @@ pytest
 
 # poke the MCP tools directly, no LLM:
 python mcp_playground.py
+
+# see the RAG retriever rank guide passages, no LLM:
+python rag_playground.py "how do I get around Kyoto"
 
 # to actually chat, add your key, then:
 cp .env.example .env   # fill in GOOGLE_API_KEY
@@ -59,13 +67,17 @@ trip_concierge/
   agent.py      # coordinator + guide / budget / planner sub-agents (root_agent)
   mcp_agent.py  # same concierge, tools consumed over MCP (McpToolset)
   a2a_agent.py  # coordinator calling the budget specialist over A2A
+  rag_agent.py  # destination expert answering from guides, with citations
+  rag.py        # dependency-free TF-IDF retriever (search_guides)
   tools.py      # find_attractions, estimate_trip_cost + the seed dataset
+data/guides/    # the RAG corpus (curated markdown destination guides)
 mcp_server/
   server.py     # FastMCP server exposing the two tools over stdio
 budget_service.py  # budget agent served as an A2A service (to_a2a)
 run.py          # minimal CLI runner
 mcp_playground.py  # list + call the MCP tools directly, no LLM
-tests/          # structure, tool, MCP, and A2A tests
+rag_playground.py  # rank guide passages for a query, no LLM
+tests/          # structure, tool, MCP, A2A, and RAG tests
 ```
 
 ## Roadmap
@@ -73,6 +85,6 @@ tests/          # structure, tool, MCP, and A2A tests
 - [x] Phase 1 — multi-agent core (coordinator + specialists)
 - [x] Phase 2 — MCP server + MCP-consuming agent + playground
 - [x] Phase 3 — A2A-served budget specialist
-- [ ] Phase 4 — RAG over destination guides
+- [x] Phase 4 — RAG over destination guides (TF-IDF retriever + cited answers)
 - [ ] Phase 5 — calendar OAuth, itinerary email + reminders
 - [ ] Phase 6 — web frontend
