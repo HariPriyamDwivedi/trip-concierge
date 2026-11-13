@@ -1,8 +1,26 @@
-.venv/
+# Python
 __pycache__/
-*.pyc
-.env
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets: only the template is committed
+.env
+.env.*
+!.env.example
+
+# Local runtime data: dry-run emails, reminders, uploaded files
 outbox/
 reminders.json
 uploads/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/

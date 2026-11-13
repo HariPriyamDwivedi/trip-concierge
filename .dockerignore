@@ -1,9 +1,33 @@
+# Patterns match from the build-context root, so nested paths need **/
+
+# VCS, virtualenvs, caches, editors
 .git
+.gitignore
 .venv
-.env
-__pycache__
-*.pyc
+venv
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
 .pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+**/.DS_Store
+.idea
+.vscode
+.claude
+
+# Secrets: compose passes them at runtime (env_file); never bake them into the image
+.env
+.env.*
+
+# Local runtime data: dry-run emails, reminders, uploaded files
 outbox
 reminders.json
-uploads/
+uploads
+
+# Docker's own files aren't needed inside the image
+Dockerfile
+compose.yaml
+.dockerignore
