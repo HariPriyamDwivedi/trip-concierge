@@ -33,6 +33,10 @@ and reminders**. Everything is safe by default: the email tool **dry-runs** to
 calendar reads a local stub unless you configure real **Google OAuth**
 (`trip_concierge/oauth.py`, opt-in); reminders persist to a local JSON store.
 
+Finally, a small **FastAPI backend + browser chat UI** (`web/`) makes the whole
+thing demoable: `uvicorn web.app:app --port 8000`, then open
+`http://localhost:8000`.
+
 ## Quick start
 
 ```bash
@@ -54,6 +58,9 @@ python run.py "3 nights in Kyoto — what should I do and what will it cost?"
 
 # or the ADK dev UI:
 adk web
+
+# or the web app (chat UI in the browser):
+uvicorn web.app:app --port 8000   # then open http://localhost:8000
 ```
 
 ### A2A variant (two terminals)
@@ -86,10 +93,14 @@ data/calendar_stub.json  # sample busy slots for the calendar stub
 mcp_server/
   server.py     # FastMCP server exposing the two tools over stdio
 budget_service.py  # budget agent served as an A2A service (to_a2a)
+web/
+  app.py        # FastAPI backend (injectable reply) + routes
+  agent_runner.py  # session-aware ADK runner for the web layer
+  static/index.html  # dependency-free browser chat UI
 run.py          # minimal CLI runner
 mcp_playground.py  # list + call the MCP tools directly, no LLM
 rag_playground.py  # rank guide passages for a query, no LLM
-tests/          # structure, tool, MCP, A2A, and RAG tests
+tests/          # structure, tool, MCP, A2A, RAG, Phase 5, and web tests
 ```
 
 ## Roadmap
@@ -99,4 +110,4 @@ tests/          # structure, tool, MCP, A2A, and RAG tests
 - [x] Phase 3 — A2A-served budget specialist
 - [x] Phase 4 — RAG over destination guides (TF-IDF retriever + cited answers)
 - [x] Phase 5 — calendar OAuth, itinerary email (dry-run) + reminders
-- [ ] Phase 6 — web frontend
+- [x] Phase 6 — FastAPI backend + browser chat UI
