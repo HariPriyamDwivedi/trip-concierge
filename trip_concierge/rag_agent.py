@@ -4,7 +4,7 @@ Phase 4: retrieval-augmented generation. The agent must answer only from what
 search_guides returns and cite the source guide for each claim, so answers stay
 grounded in the corpus rather than the model's own recollection.
 
-`root_agent` is an alternative entry point (`adk run trip_concierge.rag_agent`).
+`root_agent` is an alternative entry point (`TRIP_AGENT=trip_concierge.rag_agent python run.py`).
 """
 
 import os

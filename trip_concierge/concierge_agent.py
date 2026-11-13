@@ -5,7 +5,7 @@ sent), the calendar reads a local stub unless real OAuth is configured, and
 reminders persist locally. The agent must not claim an email was sent when it was
 only drafted.
 
-`root_agent` is an alternative entry point (`adk run trip_concierge.concierge_agent`).
+`root_agent` is an alternative entry point (`TRIP_AGENT=trip_concierge.concierge_agent python run.py`).
 """
 
 import os

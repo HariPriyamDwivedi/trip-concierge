@@ -44,7 +44,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # run the smoke + MCP tests (no key needed)
-pytest
+python -m pytest
 
 # poke the MCP tools directly, no LLM:
 python mcp_playground.py
@@ -61,7 +61,13 @@ adk web
 
 # or the web app (chat UI in the browser):
 uvicorn web.app:app --port 8000   # then open http://localhost:8000
+
+# other variants: pick the agent module with TRIP_AGENT
+TRIP_AGENT=trip_concierge.rag_agent python run.py "how do I get around Kyoto?"
 ```
+
+`run.py` and `uvicorn` don't read `.env` themselves; export it first with
+`set -a; source .env; set +a` (Docker Compose loads it for you).
 
 ### A2A variant (two terminals)
 
@@ -70,7 +76,31 @@ uvicorn web.app:app --port 8000   # then open http://localhost:8000
 uvicorn budget_service:app --host localhost --port 8001
 
 # terminal 2 — a coordinator that calls it remotely
-adk run trip_concierge.a2a_agent
+TRIP_AGENT=trip_concierge.a2a_agent python run.py "4 nights in Lisbon for 2, cost?"
+```
+
+### Docker Compose
+
+`compose.yaml` runs the web app (port 8000) and the A2A budget service (port
+8001) from one image, reading `GOOGLE_API_KEY` from `.env`.
+
+```bash
+cp .env.example .env              # fill in GOOGLE_API_KEY
+docker compose up -d --build      # web on :8000, budget on :8001
+
+# no key needed
+docker compose run --rm --no-deps web python -m pytest
+docker compose exec web python mcp_playground.py
+docker compose exec web python rag_playground.py "how do I get around Kyoto"
+curl localhost:8001/.well-known/agent-card.json
+
+# needs the key: chat UI at http://localhost:8000, or
+curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
+  -d '{"message":"3 nights in Kyoto for 2 — what to do and cost?","session_id":"demo"}'
+docker compose exec -e TRIP_AGENT=trip_concierge.a2a_agent web python run.py "4 nights in Lisbon for 2, cost?"
+
+docker compose exec web ls outbox  # dry-run itinerary emails land here
+docker compose down
 ```
 
 ## Layout

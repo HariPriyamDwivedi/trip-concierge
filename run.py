@@ -2,18 +2,22 @@
 
 Usage:
     python run.py "3 nights in Kyoto, what should I do and what will it cost?"
+    TRIP_AGENT=trip_concierge.rag_agent python run.py "how do I get around Kyoto?"
 
 Needs GOOGLE_API_KEY set (see .env.example). For a richer dev UI, run
 `adk web` from the project root instead.
 """
 
 import asyncio
+import importlib
+import os
 import sys
 
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from trip_concierge import root_agent
+# Pick a variant with TRIP_AGENT, e.g. trip_concierge.a2a_agent (adk run only takes folders).
+root_agent = importlib.import_module(os.getenv("TRIP_AGENT", "trip_concierge")).root_agent
 
 APP = "trip_concierge"
 USER = "local-user"

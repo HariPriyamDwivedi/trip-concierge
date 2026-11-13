@@ -9,11 +9,14 @@ Its agent card is then at
     http://localhost:8001/.well-known/agent-card.json
 """
 
+import os
+
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
 
 from trip_concierge.agent import make_budget
 
 # Serve a fresh (unparented) budget agent. to_a2a returns a Starlette ASGI app;
 # `host`/`port` only set the advertised card URL — the actual bind address is
-# chosen by the uvicorn command above.
-app = to_a2a(make_budget(), host="localhost", port=8001)
+# chosen by the uvicorn command above. In Docker Compose the card must name the
+# service ("budget") so other containers can reach it.
+app = to_a2a(make_budget(), host=os.getenv("BUDGET_PUBLIC_HOST", "localhost"), port=8001)
