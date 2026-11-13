@@ -103,6 +103,43 @@ rag_playground.py  # rank guide passages for a query, no LLM
 tests/          # structure, tool, MCP, A2A, RAG, Phase 5, and web tests
 ```
 
+## How a request flows
+
+Walking one message through the web app (Phase 6), end to end:
+
+> **"3 nights in Kyoto — what should I do and what will it cost for 2 people?"**
+
+```
+Browser (index.html)            FastAPI (web/app.py)      ADK (agent_runner.py)        Gemini + tools
+      │                               │                          │                          │
+ 1. GET /  ──────────────────────────▶ index() → index.html     │                          │
+ 2. JS makes a per-visitor session id │                          │                          │
+ 3. POST /chat {message, session_id} ─▶ chat() ─await reply()──▶ reply(client_id, msg)      │
+      │                               │                     4. new ADK session (first time)  │
+      │                               │                     5. run_async(root_agent, msg) ──▶ model reasons
+      │                               │                          │                     6. tool calls ↓
+      │                               │                          │◀── find_attractions("Kyoto")
+      │                               │                          │◀── estimate_trip_cost("Kyoto",3,2)
+      │                               │                     7. collect final text ◀───────── model composes
+ 8. {reply} ◀──────────────────────────────────────────────────┘                          │
+ 9. JS swaps the "…" bubble for the reply
+```
+
+1. **Page load** — `GET /` serves `web/static/index.html`; its JS creates a per-visitor id (e.g. `web-k3f9x`) so the server can keep conversation continuity.
+2. **Send** — the browser `POST`s `/chat` with the message and session id; a "…" placeholder appears.
+3. **FastAPI** — `/chat` validates the body and `await`s the injected `reply(session_id, message)` callable.
+4. **Session** — `ConciergeRunner.reply` creates a fresh ADK session the first time it sees a session id, and reuses it on later turns (so follow-ups have context).
+5. **Agent run** — the message is wrapped in `types.Content` and passed to `runner.run_async` on the `trip_concierge_plus` agent.
+6. **Tools** — ADK sends the instruction, message and tool declarations to Gemini, which calls the Python tools in-process (`find_attractions`, `estimate_trip_cost` → `140 × 3 × 2 = 1120`); each result is fed back to the model.
+7. **Answer** — grounded in the tool outputs, the model writes a short combined reply; `reply()` concatenates the text parts.
+8. **Response** — `/chat` returns `{ "reply": "..." }`.
+9. **Render** — the browser replaces the placeholder with the answer.
+
+Side-effecting actions stay safe: `schedule_reminder` writes to a local store, and
+`send_itinerary` **dry-runs to `outbox/`** and only sends with explicit opt-in. The
+other phases are alternative entry points that change *how* a capability is served
+(MCP, A2A, RAG) over the same tools — see the commands above.
+
 ## Roadmap
 
 - [x] Phase 1 — multi-agent core (coordinator + specialists)
