@@ -27,6 +27,12 @@ set of curated guides in `data/guides/`, retrieving passages with a
 dependency-free TF-IDF retriever (`trip_concierge/rag.py`) and citing the source
 of each claim.
 
+A fuller concierge (`trip_concierge/concierge_agent.py`) adds **calendar, email
+and reminders**. Everything is safe by default: the email tool **dry-runs** to
+`outbox/` and sends nothing unless you explicitly opt in with SMTP creds; the
+calendar reads a local stub unless you configure real **Google OAuth**
+(`trip_concierge/oauth.py`, opt-in); reminders persist to a local JSON store.
+
 ## Quick start
 
 ```bash
@@ -69,8 +75,14 @@ trip_concierge/
   a2a_agent.py  # coordinator calling the budget specialist over A2A
   rag_agent.py  # destination expert answering from guides, with citations
   rag.py        # dependency-free TF-IDF retriever (search_guides)
+  concierge_agent.py  # Phase 5: itinerary + calendar + email + reminders
+  calendar.py   # free/busy (local stub default, Google OAuth opt-in)
+  notifications.py    # itinerary email (dry-run by default, never auto-sends)
+  reminders.py  # local reminder store
+  oauth.py      # testable OAuth 2.0 helper (opt-in Google flow)
   tools.py      # find_attractions, estimate_trip_cost + the seed dataset
 data/guides/    # the RAG corpus (curated markdown destination guides)
+data/calendar_stub.json  # sample busy slots for the calendar stub
 mcp_server/
   server.py     # FastMCP server exposing the two tools over stdio
 budget_service.py  # budget agent served as an A2A service (to_a2a)
@@ -86,5 +98,5 @@ tests/          # structure, tool, MCP, A2A, and RAG tests
 - [x] Phase 2 — MCP server + MCP-consuming agent + playground
 - [x] Phase 3 — A2A-served budget specialist
 - [x] Phase 4 — RAG over destination guides (TF-IDF retriever + cited answers)
-- [ ] Phase 5 — calendar OAuth, itinerary email + reminders
+- [x] Phase 5 — calendar OAuth, itinerary email (dry-run) + reminders
 - [ ] Phase 6 — web frontend
