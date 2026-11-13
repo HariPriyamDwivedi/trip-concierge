@@ -15,6 +15,13 @@ def test_specialists_have_tools():
         assert agent.tools, f"{agent.name} should expose at least one tool"
 
 
+def test_web_concierge_can_price_trips():
+    # The web app runs this agent; it must be able to answer cost questions.
+    from trip_concierge.concierge_agent import root_agent as plus
+
+    assert estimate_trip_cost in plus.tools
+
+
 def test_find_attractions_known_and_unknown():
     hit = find_attractions("Kyoto")
     assert hit["found"] is True
