@@ -121,7 +121,12 @@ button { font: inherit; color: inherit; }
 .chip.guide { color: var(--accent); }
 a.chip:hover { border-color: var(--accent); color: var(--accent); }
 
-.typing { display: flex; gap: 5px; padding: 14px; }
+.typing { display: flex; gap: 5px; padding: 6px 2px; }
+.activity { margin-top: 6px; font-size: 12px; color: var(--accent); }
+.is-streaming .md > :last-child::after {
+  content: ""; display: inline-block; width: 7px; height: 1em; margin-left: 2px;
+  vertical-align: -2px; background: var(--accent); animation: blink 1s infinite;
+}
 .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite ease-in-out; }
 .typing span:nth-child(2) { animation-delay: 0.15s; }
 .typing span:nth-child(3) { animation-delay: 0.3s; }
@@ -237,6 +242,44 @@ a.chip:hover { border-color: var(--accent); color: var(--accent); }
 .switch.on { background: var(--accent); }
 .switch.on span { transform: translateX(16px); }
 .switch:disabled { opacity: 0.6; }
+.connector-account { font-size: 12px; margin-top: 6px; }
+.sign-in { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sign-in .btn { text-decoration: none; }
+.link { border: 0; padding: 0; background: none; color: var(--accent); cursor: pointer; text-decoration: underline; font-size: 12px; }
+
+/* ── Timeline, alerts, seasonal ─────────────────────────────────────────── */
+.timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+.tl-item { display: flex; gap: 12px; align-items: flex-start; padding: 8px 0; position: relative; }
+.tl-item:not(:last-child)::after { content: ""; position: absolute; left: 15.5px; top: 40px; bottom: -6px; border-left: 1px dashed var(--line); }
+.tl-icon { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.tl-item.stay .tl-icon, .tl-item.activity .tl-icon { background: var(--warm-soft); color: var(--warm); }
+.tl-body { flex: 1; min-width: 0; }
+.tl-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; }
+.small-icon { width: 30px; height: 30px; }
+.item-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.item-form label { display: grid; gap: 4px; font-size: 13px; font-weight: 550; }
+.item-form input { font: inherit; font-weight: 400; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); min-width: 0; }
+.span-all { grid-column: 1 / -1; }
+.kind-picker { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.kind-picker button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 13px; }
+.kind-picker button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.form-error { color: var(--danger); font-size: 13px; }
+
+.popover.alerts { width: min(400px, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto; }
+.alert-permission { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 10px; margin: 8px 0; border-radius: 10px; background: var(--accent-soft); }
+.alert-day { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 12px 0 6px; }
+.alert-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.alert-list li { display: flex; gap: 10px; }
+.alert-list li.due .alert-title { color: var(--accent); }
+.alert-time { flex: none; width: 46px; font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.alert-title { font-weight: 600; font-size: 14px; }
+
+.seasonal { margin-bottom: 16px; }
+.seasonal-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; color: var(--warm); margin-bottom: 8px !important; }
+.seasonal-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.seasonal-chips .chip { cursor: pointer; font-size: 13px; padding: 4px 11px; color: var(--ink); }
+.seasonal-chips .chip:hover { border-color: var(--warm); color: var(--warm); }
 
 /* ── Small screens: one pane at a time, switched by tabs ────────────────── */
 @media (max-width: 900px) {
@@ -251,6 +294,7 @@ a.chip:hover { border-color: var(--accent); color: var(--accent); }
   .chat { border-right: 0; }
   .board { padding: 20px 16px 28px; }
   .grid { grid-template-columns: 1fr; }
+  .item-form { grid-template-columns: 1fr; }
   .span-2 { grid-column: auto; }
 }
 

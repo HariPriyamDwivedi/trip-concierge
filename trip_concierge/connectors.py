@@ -7,10 +7,14 @@ reads the inbox nor changes the calendar.
 
 The on/off switch lives in ADK session state (so it persists with the trip), and
 `guard_connectors` (a before-tool callback) blocks a tool whose connector is off.
+Signing in with Google or Microsoft (accounts.py) makes a connector use the
+traveller's real calendar or mailbox; without it, the demo providers below apply.
 """
 
 import os
 from typing import Any, Optional
+
+from .accounts import account_view, available_providers
 
 STATE_PREFIX = "connector_"
 
@@ -43,17 +47,27 @@ def _provider(connector_id: str) -> dict:
 
 
 def connectors_view(state: dict) -> list[dict]:
-    return [
-        {
-            "id": cid,
-            "name": c["name"],
-            "purpose": c["purpose"],
-            "limits": c["limits"],
-            **_provider(cid),
-            "connected": bool(state.get(STATE_PREFIX + cid)),
-        }
-        for cid, c in CONNECTORS.items()
-    ]
+    views = []
+    for cid, c in CONNECTORS.items():
+        account = account_view(state, cid)
+        provider = (
+            {"provider": f"{account['label']} · {account['account']}", "mode": "live"}
+            if account
+            else _provider(cid)
+        )
+        views.append(
+            {
+                "id": cid,
+                "name": c["name"],
+                "purpose": c["purpose"],
+                "limits": c["limits"],
+                **provider,
+                "account": account,
+                "sign_in": available_providers(),
+                "connected": bool(state.get(STATE_PREFIX + cid)),
+            }
+        )
+    return views
 
 
 def guard_connectors(tool: Any, args: dict, tool_context: Any) -> Optional[dict]:

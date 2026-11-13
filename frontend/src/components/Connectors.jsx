@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon.jsx";
+import { signInUrl } from "../api.js";
 
 const ICON = { calendar: "calendar", mail: "mail" };
+const PROVIDER_LABEL = { google: "Google", microsoft: "Microsoft" };
 
 // Top-bar menu to switch the Mail and Calendar connectors on or off for this trip.
-export default function Connectors({ connectors, onToggle }) {
+export default function Connectors({ sessionId, connectors, onToggle, onDisconnect }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(null);
   const ref = useRef(null);
@@ -42,7 +44,8 @@ export default function Connectors({ connectors, onToggle }) {
         <div className="popover" role="dialog" aria-label="Connectors">
           <p className="popover-title">Connectors for this trip</p>
           <p className="popover-intro">
-            Trip Concierge only uses these to plan this trip. Turn one on to let the concierge use it.
+            Trip Concierge only uses these to plan this trip. Sign in to use your own calendar or mailbox, or switch
+            one on to try it with demo data.
           </p>
           <ul>
             {connectors.map((c) => (
@@ -59,6 +62,24 @@ export default function Connectors({ connectors, onToggle }) {
                   <p className="connector-meta">
                     {c.provider} · {c.limits}
                   </p>
+                  {c.account ? (
+                    <p className="connector-account">
+                      Signed in with {c.account.label} as <strong>{c.account.account}</strong>{" "}
+                      <button className="link" onClick={() => onDisconnect(c.id)}>
+                        Sign out
+                      </button>
+                    </p>
+                  ) : (
+                    c.sign_in?.length > 0 && (
+                      <div className="sign-in">
+                        {c.sign_in.map((p) => (
+                          <a key={p} className="btn ghost small" href={signInUrl(sessionId, c.id, p)}>
+                            Sign in with {PROVIDER_LABEL[p] || p}
+                          </a>
+                        ))}
+                      </div>
+                    )
+                  )}
                 </div>
                 <button
                   role="switch"

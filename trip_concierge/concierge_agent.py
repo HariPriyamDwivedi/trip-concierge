@@ -23,6 +23,8 @@ from .connectors import guard_connectors
 from .documents import search_my_documents
 from .notifications import send_itinerary
 from .rag import search_guides
+from .seasons import seasonal_destinations
+from .timeline import add_trip_item
 from .reminders import schedule_reminder
 from .tools import estimate_trip_cost, find_attractions
 from .trip_board import record_trip_state, save_itinerary
@@ -65,6 +67,10 @@ root_agent = Agent(
         "nights or travellers first), "
         "save_itinerary every time you propose or change a day-by-day plan (it "
         "shows on the traveller's trip board), "
+        "add_trip_item for every booked or timed thing the traveller mentions or "
+        "uploads (train, flight, bus, stay, activity) so they get boarding, arrival "
+        "and check-in alerts — ask for the date and time if missing, "
+        "seasonal_destinations when they ask where or when to go, "
         "free_slots to find open time on a given date, send_itinerary to prepare "
         "the itinerary email, and schedule_reminder for follow-ups. "
         "send_itinerary only drafts a dry run by default — tell the traveller the "
@@ -73,6 +79,9 @@ root_agent = Agent(
         "free_slots and send_itinerary belong to the Calendar and Mail connectors, "
         "which the traveller switches on per trip; if a tool says its connector is "
         "off, tell them to turn it on under Connectors and don't retry. "
+        "When send_itinerary would send from the traveller's own signed-in mailbox, "
+        "first show them the recipient and subject and only call it after they "
+        "explicitly confirm in their latest message. "
         "Keep replies warm and brief.\n\n" + _RETRIEVAL
     ),
     tools=[
@@ -82,6 +91,8 @@ root_agent = Agent(
         send_itinerary,
         schedule_reminder,
         save_itinerary,
+        add_trip_item,
+        seasonal_destinations,
         search_my_documents,
         search_guides,
         *([web_search] if WEB_SEARCH_ENABLED else []),

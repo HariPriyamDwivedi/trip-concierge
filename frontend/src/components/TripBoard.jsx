@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import Icon from "./Icon.jsx";
+import Timeline from "./Timeline.jsx";
 
 const usd = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
@@ -17,14 +18,25 @@ function formatDate(value) {
 }
 
 // Compact "Kyoto · 3 nights · 2 travellers · $840" line for the top bar.
+// "3 bookings · from Sun 14 Mar" when the trip has timeline items.
+function bookingsLine(items) {
+  if (!items?.length) return null;
+  const first = new Date(items[0].starts_at).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  return `${items.length} booking${items.length > 1 ? "s" : ""} · from ${first}`;
+}
+
 export function TripSummary({ trip }) {
   const b = trip.budget;
-  if (!trip.city) return <div className="summary muted">No trip yet</div>;
+  const bookings = bookingsLine(trip.items);
+  if (!trip.city && !bookings) return <div className="summary muted">No trip yet</div>;
   return (
     <div className="summary" aria-label="Trip summary">
-      <span className="summary-city">
-        <Icon name="pin" size={14} /> {trip.city}
-      </span>
+      {trip.city && (
+        <span className="summary-city">
+          <Icon name="pin" size={14} /> {trip.city}
+        </span>
+      )}
+      {bookings && <span>{bookings}</span>}
       {b && (
         <>
           <span>{b.nights} nights</span>
@@ -63,7 +75,7 @@ function Empty({ children, ask, onAsk, busy }) {
   );
 }
 
-export default function TripBoard({ trip, documents, onUpload, onAsk, busy }) {
+export default function TripBoard({ trip, documents, onUpload, onAsk, busy, onAddItem, onRemoveItem }) {
   const fileRef = useRef(null);
   const city = trip.city;
   const budget = trip.budget;
@@ -74,19 +86,21 @@ export default function TripBoard({ trip, documents, onUpload, onAsk, busy }) {
 
   return (
     <section className="pane board" aria-label="Trip board">
-      <div className={`hero ${city ? "" : "is-empty"}`}>
+      <div className={`hero ${city || trip.items?.length ? "" : "is-empty"}`}>
         <p className="eyebrow">Your trip</p>
-        <h1>{city || "Your trip takes shape here"}</h1>
+        <h1>{city || (trip.items?.length ? "Your trip" : "Your trip takes shape here")}</h1>
         <p className="hero-sub">
           {budget
             ? `${budget.nights} nights · ${budget.travelers} travellers`
-            : city
-              ? "Ask for a budget or a day-by-day plan"
+            : city || trip.items?.length
+              ? bookingsLine(trip.items) || "Ask for a budget or a day-by-day plan"
               : "Chat with the concierge — destinations, budget, days and bookings appear on this board."}
         </p>
       </div>
 
       <div className="grid">
+        <Timeline items={trip.items || []} onAdd={onAddItem} onRemove={onRemoveItem} />
+
         <Card icon="wallet" title="Budget" className="budget">
           {budget ? (
             <>
@@ -170,7 +184,7 @@ export default function TripBoard({ trip, documents, onUpload, onAsk, busy }) {
           )}
         </Card>
 
-        <Card icon="bell" title="Reminders & drafts">
+        <Card icon="mail" title="Reminders & drafts">
           {reminders.length || emails.length ? (
             <ul className="events">
               {reminders.map((r, i) => (

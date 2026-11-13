@@ -49,6 +49,7 @@ def test_chat_round_trip(client):
         "reply": "echo[s1]: hi",
         "sources": [{"kind": "guide", "label": "kyoto", "url": None}],
         "trip": {"city": "Kyoto"},
+        "notifications": [],
     }
 
 
@@ -87,3 +88,34 @@ def test_upload_rejects_bad_input(client, svc, session_id, name, data, status):
     resp = client.post("/api/upload", data={"session_id": session_id}, files={"file": (name, data)})
     assert resp.status_code == status
     assert svc.uploads == []
+
+
+def test_chat_stream_sends_server_sent_events():
+    class StreamSvc(FakeService):
+        async def chat_stream(self, session_id, message):
+            yield {"type": "tool", "name": "search_guides"}
+            yield {"type": "delta", "text": "Take "}
+            yield {"type": "delta", "text": "buses."}
+            yield {"type": "done", "reply": "Take buses.", "sources": [], "trip": {}}
+
+    with TestClient(create_app(service=StreamSvc())).stream(
+        "POST", "/api/chat/stream", json={"session_id": "s1", "message": "hi"}
+    ) as resp:
+        assert resp.headers["content-type"].startswith("text/event-stream")
+        body = "".join(resp.iter_text())
+    events = [b.split("\n")[0].removeprefix("event: ") for b in body.strip().split("\n\n")]
+    assert events == ["tool", "delta", "delta", "done"]
+    assert 'data: {"text": "buses."}' in body
+
+
+def test_chat_stream_reports_failures_as_an_event():
+    class Broken(FakeService):
+        async def chat_stream(self, session_id, message):
+            yield {"type": "tool", "name": "search_guides"}
+            raise RuntimeError("model down")
+
+    with TestClient(create_app(service=Broken())).stream(
+        "POST", "/api/chat/stream", json={"session_id": "s1", "message": "hi"}
+    ) as resp:
+        body = "".join(resp.iter_text())
+    assert "event: error" in body and "model down" not in body  # no internals leaked

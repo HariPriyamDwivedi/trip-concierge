@@ -9,6 +9,7 @@ local stub and never calls this.
 
 import json
 import os
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -54,24 +55,34 @@ def build_authorization_url(config: OAuthConfig, state: str) -> str:
 def _post_form(url: str, fields: dict) -> dict:
     body = urllib.parse.urlencode(fields).encode()
     req = urllib.request.Request(url, data=body, method="POST")
-    with urllib.request.urlopen(req) as resp:  # noqa: S310 - fixed token endpoint
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310 - fixed token endpoint
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:  # token errors come back as 400 + JSON {"error": ...}
+        try:
+            return json.loads(exc.read().decode())
+        except ValueError:
+            return {"error": f"HTTP {exc.code}"}
 
 
 def exchange_code_for_token(
-    config: OAuthConfig, code: str, *, transport: Transport = _post_form
+    config: OAuthConfig,
+    code: str,
+    *,
+    code_verifier: str | None = None,
+    transport: Transport = _post_form,
 ) -> dict:
-    """Exchange an authorization code for an access/refresh token."""
-    return transport(
-        config.token_endpoint,
-        {
-            "client_id": config.client_id,
-            "client_secret": config.client_secret,
-            "code": code,
-            "grant_type": "authorization_code",
-            "redirect_uri": config.redirect_uri,
-        },
-    )
+    """Exchange an authorization code for an access/refresh token (PKCE verifier optional)."""
+    fields = {
+        "client_id": config.client_id,
+        "client_secret": config.client_secret,
+        "code": code,
+        "grant_type": "authorization_code",
+        "redirect_uri": config.redirect_uri,
+    }
+    if code_verifier:
+        fields["code_verifier"] = code_verifier
+    return transport(config.token_endpoint, fields)
 
 
 def refresh_access_token(

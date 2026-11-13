@@ -7,6 +7,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: { "/api": process.env.API_URL || "http://localhost:8000" },
+    proxy: {
+      "/api": process.env.API_URL || "http://localhost:8000",
+      // OAuth callback (registered as http://localhost:8080/oauth/callback; set
+      // OAUTH_REDIRECT_URI to http://localhost:5173/oauth/callback only if registered).
+      "/oauth/callback": {
+        target: process.env.API_URL || "http://localhost:8000",
+        rewrite: (path) => path.replace(/^\/oauth\/callback/, "/api/oauth/callback"),
+      },
+    },
   },
 });

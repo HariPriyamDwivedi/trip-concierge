@@ -49,9 +49,27 @@ retrieved. Each answer shows the sources it cited.
 
 **Mail and Calendar are connectors**, like in Claude Desktop: switched on per
 trip under *Connectors*, and only for the trip — Calendar checks free time around
-travel dates (read-only), Mail sends the itinerary (drafts only unless SMTP
-sending is enabled; it never reads the inbox). Until a connector is on, the agent
-can't use its tool and says so.
+travel dates (read-only), Mail sends the itinerary (it never reads the inbox).
+**Sign in with Google or Microsoft** to use your own calendar and mailbox, with
+the smallest scopes (`calendar.freebusy` / `Calendars.Read`, `gmail.send` /
+`Mail.Send`); tokens are encrypted with `ENCRYPTION_KEY` and never reach the
+browser. Without sign-in they run on demo data (a sample calendar; email drafts
+saved to `outbox/`). Until a connector is on, the agent can't use its tool, and it
+asks before sending from your own mailbox.
+
+**Trip alerts**: add trains, flights, buses, stays and activities to the trip
+(in the UI, or by telling/uploading them to the concierge) and the bell shows the
+alerts travel apps like ixigo, ConfirmTkt and hostel apps send — chart prepared
+(~4 h before a train), time to board, a wake-up before your stop, web check-in,
+check-in/check-out, activity start, and "your trip starts tomorrow". With browser
+notifications allowed, they pop up while the app is open.
+
+**Season-wise picks**: the welcome screen shows destinations in season this
+month, and the concierge answers "where should I go in December?" from a curated
+best-months table (`seasonal_destinations`).
+
+Replies **stream** in as Gemini writes them, with a live "Searching your files…"
+style status while tools run.
 
 ## Quick start
 
@@ -143,10 +161,17 @@ docker compose down                # add -v to also delete stored sessions and u
 | Route | Does |
 |---|---|
 | `GET /api/health` | liveness |
-| `GET /api/sessions/{id}` | `{messages, trip, documents, connectors}` — everything the UI shows |
+| `GET /api/sessions/{id}` | `{messages, trip, documents, connectors, notifications}` — everything the UI shows |
 | `POST /api/chat` | `{session_id, message}` → `{reply, sources, trip}` |
+| `POST /api/chat/stream` | same body; server-sent events `tool`, `delta`, `done` (or `error`) |
 | `POST /api/upload` | multipart `session_id`, `file` → `{filename, chars, documents}` |
 | `PUT /api/sessions/{id}/connectors/{calendar\|mail}` | `{connected}` → connectors |
+| `DELETE /api/sessions/{id}/connectors/{connector}/account` | sign out of Google/Microsoft |
+| `GET /api/oauth/{google\|microsoft}/start?session_id=&connector=` | redirect to the provider's sign-in |
+| `GET /oauth/callback` | provider redirect (nginx → `/api/oauth/callback`) |
+| `POST /api/sessions/{id}/items` | add a train/flight/bus/stay/activity → `{trip, notifications}` |
+| `DELETE /api/sessions/{id}/items/{item_id}` | remove it |
+| `GET /api/seasonal?when=November` | destinations in season / to avoid (month or season) |
 
 ## Layout
 
@@ -162,6 +187,9 @@ trip_concierge/
   concierge_agent.py  # web concierge: itinerary, cost, agentic RAG, connectors, reminders
   trip_board.py # trip board state: save_itinerary + after-tool callback
   connectors.py # Mail / Calendar connectors: per-trip switch + tool guard
+  accounts.py   # Google / Microsoft sign-in (PKCE), encrypted tokens, refresh
+  timeline.py   # trip timeline (add_trip_item) and the alerts derived from it
+  seasons.py    # best-months table + seasonal_destinations tool
   calendar.py   # free/busy (local stub default, Google OAuth opt-in)
   notifications.py    # itinerary email (dry-run by default, never auto-sends)
   reminders.py  # local reminder store
@@ -176,7 +204,7 @@ backend/
   app.py        # FastAPI API (/api/...), injectable service for tests
   agent_runner.py  # ADK runner: sessions (Postgres or memory), uploads, trip view
 frontend/       # React + Vite UI; Dockerfile builds it and serves it with nginx
-  src/components/  # Chat, TripBoard, Connectors
+  src/components/  # Chat, TripBoard, Timeline, Notifications, Connectors
 run.py          # minimal CLI runner
 mcp_playground.py  # list + call the MCP tools directly, no LLM
 rag_playground.py  # rank guide passages for a query, no LLM
@@ -217,4 +245,7 @@ board and connector switches back. Side-effecting actions stay safe:
 - [x] Phase 6 — FastAPI backend + browser chat UI
 - [x] Phase 7 — agentic RAG (files, guides, Tavily), uploads, Postgres sessions
 - [x] Phase 8 — separate React frontend with trip board, Mail/Calendar connectors
-- [ ] Next — real Google / Microsoft sign-in for the connectors
+- [x] Phase 9 — streaming replies, Google/Microsoft sign-in for connectors,
+  trip alerts (boarding, arrival, check-in, activities), season-wise picks
+- [ ] Next — push alerts when the app is closed (service worker + Web Push), live
+  PNR / train running status from a rail data API

@@ -12,3 +12,5 @@ python-multipart>=0.0.9
 pypdf>=6,<8
 # Web search tool (only used when TAVILY_API_KEY is set).
 tavily-python>=0.7,<1
+# Encrypts stored OAuth tokens for the Mail/Calendar connectors (ENCRYPTION_KEY).
+cryptography>=42
