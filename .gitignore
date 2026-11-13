@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 outbox/
 reminders.json
+uploads/

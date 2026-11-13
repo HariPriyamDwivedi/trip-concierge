@@ -37,6 +37,14 @@ Finally, a small **FastAPI backend + browser chat UI** (`web/`) makes the whole
 thing demoable: `uvicorn web.app:app --port 8000`, then open
 `http://localhost:8000`.
 
+The web concierge answers questions by **agentic RAG**: it picks a source per
+question — the traveller's **uploaded files** (📎 in the chat UI: .txt, .md or
+.pdf up to 5 MB, private to that chat), the curated **guides**, or the **web via
+Tavily** (only when `TAVILY_API_KEY` is set) — judges whether the passages answer
+the question, rewrites the query or switches source if not, and answers only from
+what it retrieved, citing `[file: …]`, `[guide: …]` or a URL. Uploads are stored
+as ADK artifacts under `UPLOAD_DIR`.
+
 ## Quick start
 
 ```bash
@@ -82,11 +90,14 @@ TRIP_AGENT=trip_concierge.a2a_agent python run.py "4 nights in Lisbon for 2, cos
 ### Docker Compose
 
 `compose.yaml` runs the web app (port 8000) and the A2A budget service (port
-8001) from one image, reading `GOOGLE_API_KEY` from `.env`.
+8001) from one image, reading `GOOGLE_API_KEY` from `.env`, plus Postgres
+(host port 5433) where the web chat stores its ADK sessions
+(`DatabaseSessionService`), so conversations survive restarts. Outside Compose,
+set `SESSION_DB_URL` to use a database; unset, sessions stay in memory.
 
 ```bash
 cp .env.example .env              # fill in GOOGLE_API_KEY
-docker compose up -d --build      # web on :8000, budget on :8001
+docker compose up -d --build      # web on :8000, budget on :8001, Postgres on :5433
 
 # no key needed
 docker compose run --rm --no-deps web python -m pytest
@@ -94,13 +105,15 @@ docker compose exec web python mcp_playground.py
 docker compose exec web python rag_playground.py "how do I get around Kyoto"
 curl localhost:8001/.well-known/agent-card.json
 
-# needs the key: chat UI at http://localhost:8000, or
+# needs the key: chat UI at http://localhost:8000 (📎 to upload), or
+curl -X POST localhost:8000/upload -F session_id=demo -F file=@booking.pdf
 curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
   -d '{"message":"3 nights in Kyoto for 2 — what to do and cost?","session_id":"demo"}'
 docker compose exec -e TRIP_AGENT=trip_concierge.a2a_agent web python run.py "4 nights in Lisbon for 2, cost?"
 
 docker compose exec web ls outbox  # dry-run itinerary emails land here
-docker compose down
+docker compose exec postgres psql -U trip -d trip_concierge -c "select user_id, id from sessions"
+docker compose down                # add -v to also delete the stored sessions
 ```
 
 ## Layout
@@ -111,8 +124,10 @@ trip_concierge/
   mcp_agent.py  # same concierge, tools consumed over MCP (McpToolset)
   a2a_agent.py  # coordinator calling the budget specialist over A2A
   rag_agent.py  # destination expert answering from guides, with citations
-  rag.py        # dependency-free TF-IDF retriever (search_guides)
-  concierge_agent.py  # Phase 5: itinerary + calendar + email + reminders
+  rag.py        # dependency-free TF-IDF retriever (search_guides, rank_passages)
+  documents.py  # upload text extraction + search_my_documents tool
+  websearch.py  # Tavily web_search tool (opt-in via TAVILY_API_KEY)
+  concierge_agent.py  # web concierge: itinerary, cost, agentic RAG, calendar, email, reminders
   calendar.py   # free/busy (local stub default, Google OAuth opt-in)
   notifications.py    # itinerary email (dry-run by default, never auto-sends)
   reminders.py  # local reminder store
@@ -125,8 +140,8 @@ mcp_server/
 budget_service.py  # budget agent served as an A2A service (to_a2a)
 web/
   app.py        # FastAPI backend (injectable reply) + routes
-  agent_runner.py  # session-aware ADK runner for the web layer
-  static/index.html  # dependency-free browser chat UI
+  agent_runner.py  # session-aware ADK runner (Postgres via SESSION_DB_URL, else in-memory)
+  static/index.html  # dependency-free browser chat UI with file upload
 run.py          # minimal CLI runner
 mcp_playground.py  # list + call the MCP tools directly, no LLM
 rag_playground.py  # rank guide passages for a query, no LLM

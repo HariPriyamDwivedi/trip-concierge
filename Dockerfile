@@ -10,6 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt pytest
 RUN useradd --create-home app && chown app /app
 COPY --chown=app . .
 USER app
+# Uploaded files (a volume in compose.yaml), created here so the app user owns it.
+RUN mkdir -p uploads
 
 EXPOSE 8000 8001
 CMD ["uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "8000"]

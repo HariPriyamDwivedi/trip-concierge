@@ -1,5 +1,6 @@
 # docker compose up --build   → web chat on http://localhost:8000,
-#                                 A2A budget service on http://localhost:8001
+#                                 A2A budget service on http://localhost:8001,
+#                                 Postgres (chat sessions) on localhost:5433
 x-app: &app
   build: .
   image: trip-concierge
@@ -9,13 +10,32 @@ x-app: &app
       required: false
 
 services:
+  postgres:
+    image: postgres:16
+    environment:
+      # Local-only credentials; the database is not reachable beyond this machine.
+      POSTGRES_USER: trip
+      POSTGRES_PASSWORD: trip
+      POSTGRES_DB: trip_concierge
+    ports: ["127.0.0.1:5433:5432"]   # inspect: psql postgresql://trip:trip@localhost:5433/trip_concierge
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trip -d trip_concierge"]
+      interval: 3s
+      retries: 20
+
   web:
     <<: *app
     command: uvicorn web.app:app --host 0.0.0.0 --port 8000
     ports: ["8000:8000"]
     environment:
       BUDGET_AGENT_URL: http://budget:8001
-    depends_on: [budget]
+      SESSION_DB_URL: postgresql+asyncpg://trip:trip@postgres:5432/trip_concierge
+      UPLOAD_DIR: /app/uploads
+    volumes: [uploads_data:/app/uploads]
+    depends_on:
+      budget: {condition: service_started}
+      postgres: {condition: service_healthy}
 
   budget:
     <<: *app
@@ -24,3 +44,7 @@ services:
     environment:
       # Advertise the in-network name so the A2A coordinator can reach it.
       BUDGET_PUBLIC_HOST: budget
+
+volumes:
+  postgres_data:
+  uploads_data:

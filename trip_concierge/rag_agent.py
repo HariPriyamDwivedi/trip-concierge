@@ -7,13 +7,12 @@ grounded in the corpus rather than the model's own recollection.
 `root_agent` is an alternative entry point (`TRIP_AGENT=trip_concierge.rag_agent python run.py`).
 """
 
-import os
-
 from google.adk.agents import Agent
+
+from .agent import MODEL
 
 from .rag import search_guides
 
-MODEL = os.getenv("TRIP_CONCIERGE_MODEL", "gemini-2.0-flash")
 
 root_agent = Agent(
     name="destination_expert",

@@ -4,3 +4,11 @@ mcp>=1.24.0,<2
 a2a-sdk==0.3.26
 fastapi>=0.115
 uvicorn>=0.30
+# DatabaseSessionService (web chat sessions in Postgres); not pulled in by google-adk.
+sqlalchemy[asyncio]>=2,<3
+asyncpg==0.31.0
+# File uploads: multipart form parsing and PDF text extraction.
+python-multipart>=0.0.9
+pypdf>=6,<8
+# Web search tool (only used when TAVILY_API_KEY is set).
+tavily-python>=0.7,<1

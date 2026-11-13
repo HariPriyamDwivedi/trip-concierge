@@ -19,7 +19,7 @@ from .tools import estimate_trip_cost, find_attractions
 
 # Default model; override with TRIP_CONCIERGE_MODEL. Needs a Gemini API key
 # (GOOGLE_API_KEY) at run time — see .env.example.
-MODEL = os.getenv("TRIP_CONCIERGE_MODEL", "gemini-2.0-flash")
+MODEL = os.getenv("TRIP_CONCIERGE_MODEL", "gemini-3.8-flash")
 
 
 def make_guide() -> Agent:

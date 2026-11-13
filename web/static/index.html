@@ -37,19 +37,32 @@
     }
     button { padding: 0 18px; border: 0; border-radius: 12px; background: var(--me); color: var(--me-ink); font: inherit; cursor: pointer; }
     button:disabled { opacity: .5; cursor: default; }
+    .attach {
+      position: relative; display: flex; align-items: center; padding: 0 12px;
+      border: 1px solid var(--border); border-radius: 12px; background: var(--panel); cursor: pointer;
+    }
+    .attach:focus-within { outline: 2px solid var(--me); outline-offset: 1px; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
+      clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
   </style>
 </head>
 <body>
   <main>
     <header>
       <h1>Trip Concierge</h1>
-      <p>Ask about where to go, what it costs, or to plan a few days.</p>
+      <p>Ask about where to go, what it costs, or to plan a few days. Attach a booking or notes (.txt, .md, .pdf) to ask about them.</p>
     </header>
     <div id="log">
       <div class="hint">Try: &ldquo;3 nights in Kyoto &mdash; what should I do and what will it cost?&rdquo;</div>
     </div>
     <form id="form">
-      <input id="input" autocomplete="off" placeholder="Type a message&hellip;" />
+      <label class="attach" title="Upload a .txt, .md or .pdf file (max 5 MB)">
+        <input id="file" type="file" accept=".txt,.md,.pdf" class="sr-only" />
+        <span aria-hidden="true">📎</span><span class="sr-only">Upload a file</span>
+      </label>
+      <input id="input" autocomplete="off" placeholder="Type a message&hellip;" aria-label="Message" />
       <button id="send" type="submit">Send</button>
     </form>
   </main>
@@ -89,6 +102,29 @@
         pending.textContent = "Something went wrong. Is the server running?";
       } finally {
         send.disabled = false;
+        input.focus();
+      }
+    });
+
+    const fileInput = document.getElementById("file");
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      const note = add("Uploading " + file.name + "…", "hint");
+      const body = new FormData();
+      body.append("file", file);
+      body.append("session_id", sessionId);
+      try {
+        const res = await fetch("/upload", { method: "POST", body });
+        const data = await res.json();
+        const why = typeof data.detail === "string" ? data.detail : "invalid request";
+        note.textContent = res.ok
+          ? "📎 " + data.filename + " uploaded — ask me about it."
+          : "Couldn't upload " + file.name + ": " + why;
+      } catch (err) {
+        note.textContent = "Upload failed. Is the server running?";
+      } finally {
+        fileInput.value = "";
         input.focus();
       }
     });

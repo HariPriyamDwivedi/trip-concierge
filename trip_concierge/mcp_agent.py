@@ -15,7 +15,8 @@ from google.adk.agents import Agent
 from google.adk.tools.mcp_tool import McpToolset, StdioConnectionParams
 from mcp import StdioServerParameters
 
-MODEL = os.getenv("TRIP_CONCIERGE_MODEL", "gemini-2.0-flash")
+from .agent import MODEL
+
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
