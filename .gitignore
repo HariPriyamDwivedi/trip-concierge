@@ -20,6 +20,10 @@ outbox/
 reminders.json
 uploads/
 
+# Frontend build output and dependencies
+node_modules/
+dist/
+
 # Editors and OS
 .DS_Store
 .idea/

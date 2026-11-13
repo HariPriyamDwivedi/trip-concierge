@@ -14,7 +14,7 @@ from google.adk.sessions import InMemorySessionService
 from trip_concierge import websearch
 from trip_concierge.concierge_agent import root_agent
 from trip_concierge.documents import chunk, extract_text, search_my_documents
-from web.agent_runner import APP, ConciergeRunner
+from backend.agent_runner import APP, ConciergeRunner
 
 
 def _pdf_with_text(text: str) -> bytes:

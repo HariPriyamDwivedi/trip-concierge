@@ -1,6 +1,8 @@
-# docker compose up --build   → web chat on http://localhost:8000,
-#                                 A2A budget service on http://localhost:8001,
-#                                 Postgres (chat sessions) on localhost:5433
+# docker compose up -d --build
+#   frontend  http://localhost:8080   React app (nginx), proxies /api to the backend
+#   api       http://localhost:8000   FastAPI backend (/api/...)
+#   budget    http://localhost:8001   A2A budget service
+#   postgres  localhost:5433          chat sessions + trip boards
 x-app: &app
   build: .
   image: trip-concierge
@@ -10,23 +12,15 @@ x-app: &app
       required: false
 
 services:
-  postgres:
-    image: postgres:16
-    environment:
-      # Local-only credentials; the database is not reachable beyond this machine.
-      POSTGRES_USER: trip
-      POSTGRES_PASSWORD: trip
-      POSTGRES_DB: trip_concierge
-    ports: ["127.0.0.1:5433:5432"]   # inspect: psql postgresql://trip:trip@localhost:5433/trip_concierge
-    volumes: [postgres_data:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trip -d trip_concierge"]
-      interval: 3s
-      retries: 20
+  frontend:
+    build: ./frontend
+    image: trip-concierge-frontend
+    ports: ["8080:80"]
+    depends_on: [api]
 
-  web:
+  api:
     <<: *app
-    command: uvicorn web.app:app --host 0.0.0.0 --port 8000
+    command: uvicorn backend.app:app --host 0.0.0.0 --port 8000
     ports: ["8000:8000"]
     environment:
       BUDGET_AGENT_URL: http://budget:8001
@@ -44,6 +38,20 @@ services:
     environment:
       # Advertise the in-network name so the A2A coordinator can reach it.
       BUDGET_PUBLIC_HOST: budget
+
+  postgres:
+    image: postgres:16
+    environment:
+      # Local-only credentials; the database is not reachable beyond this machine.
+      POSTGRES_USER: trip
+      POSTGRES_PASSWORD: trip
+      POSTGRES_DB: trip_concierge
+    ports: ["127.0.0.1:5433:5432"]   # inspect: psql postgresql://trip:trip@localhost:5433/trip_concierge
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trip -d trip_concierge"]
+      interval: 3s
+      retries: 20
 
 volumes:
   postgres_data:

@@ -33,17 +33,25 @@ and reminders**. Everything is safe by default: the email tool **dry-runs** to
 calendar reads a local stub unless you configure real **Google OAuth**
 (`trip_concierge/oauth.py`, opt-in); reminders persist to a local JSON store.
 
-Finally, a small **FastAPI backend + browser chat UI** (`web/`) makes the whole
-thing demoable: `uvicorn web.app:app --port 8000`, then open
-`http://localhost:8000`.
+
+The app is split into a **backend** (`backend/`, FastAPI, API only under
+`/api`) and a **frontend** (`frontend/`, React + Vite, served by nginx). The UI
+pairs a chat with a persistent **trip board** — destination, budget with its
+arithmetic, things to do, a day-by-day itinerary, documents, reminders and email
+drafts — which the agent fills as it works and which survives reloads.
 
 The web concierge answers questions by **agentic RAG**: it picks a source per
-question — the traveller's **uploaded files** (📎 in the chat UI: .txt, .md or
-.pdf up to 5 MB, private to that chat), the curated **guides**, or the **web via
-Tavily** (only when `TAVILY_API_KEY` is set) — judges whether the passages answer
-the question, rewrites the query or switches source if not, and answers only from
-what it retrieved, citing `[file: …]`, `[guide: …]` or a URL. Uploads are stored
-as ADK artifacts under `UPLOAD_DIR`.
+question — the traveller's **uploaded files** (📎: .txt, .md or .pdf up to 5 MB,
+private to that trip), the curated **guides**, or the **web via Tavily** (only
+when `TAVILY_API_KEY` is set) — judges whether the passages answer the question,
+rewrites the query or switches source if not, and answers only from what it
+retrieved. Each answer shows the sources it cited.
+
+**Mail and Calendar are connectors**, like in Claude Desktop: switched on per
+trip under *Connectors*, and only for the trip — Calendar checks free time around
+travel dates (read-only), Mail sends the itinerary (drafts only unless SMTP
+sending is enabled; it never reads the inbox). Until a connector is on, the agent
+can't use its tool and says so.
 
 ## Quick start
 
@@ -51,7 +59,7 @@ as ADK artifacts under `UPLOAD_DIR`.
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# run the smoke + MCP tests (no key needed)
+# run the tests (no key needed)
 python -m pytest
 
 # poke the MCP tools directly, no LLM:
@@ -67,15 +75,22 @@ python run.py "3 nights in Kyoto — what should I do and what will it cost?"
 # or the ADK dev UI:
 adk web
 
-# or the web app (chat UI in the browser):
-uvicorn web.app:app --port 8000   # then open http://localhost:8000
-
 # other variants: pick the agent module with TRIP_AGENT
 TRIP_AGENT=trip_concierge.rag_agent python run.py "how do I get around Kyoto?"
 ```
 
 `run.py` and `uvicorn` don't read `.env` themselves; export it first with
 `set -a; source .env; set +a` (Docker Compose loads it for you).
+
+### Web app without Docker (two terminals)
+
+```bash
+# terminal 1 — the API
+uvicorn backend.app:app --port 8000
+
+# terminal 2 — the UI with hot reload; /api is proxied to :8000
+cd frontend && npm install && npm run dev   # then open http://localhost:5173
+```
 
 ### A2A variant (two terminals)
 
@@ -89,32 +104,49 @@ TRIP_AGENT=trip_concierge.a2a_agent python run.py "4 nights in Lisbon for 2, cos
 
 ### Docker Compose
 
-`compose.yaml` runs the web app (port 8000) and the A2A budget service (port
-8001) from one image, reading `GOOGLE_API_KEY` from `.env`, plus Postgres
-(host port 5433) where the web chat stores its ADK sessions
-(`DatabaseSessionService`), so conversations survive restarts. Outside Compose,
-set `SESSION_DB_URL` to use a database; unset, sessions stay in memory.
+| Service | Port | What |
+|---|---|---|
+| `frontend` | 8080 | React app (nginx); proxies `/api` to `api` |
+| `api` | 8000 | FastAPI backend |
+| `budget` | 8001 | A2A budget service |
+| `postgres` | 5433 (localhost only) | chat sessions + trip boards (`DatabaseSessionService`) |
+
+`api` and `budget` read `GOOGLE_API_KEY` (and optional `TAVILY_API_KEY`) from
+`.env`. Outside Compose, set `SESSION_DB_URL` to use a database; unset, sessions
+stay in memory.
 
 ```bash
 cp .env.example .env              # fill in GOOGLE_API_KEY
-docker compose up -d --build      # web on :8000, budget on :8001, Postgres on :5433
+docker compose up -d --build      # then open http://localhost:8080
 
 # no key needed
-docker compose run --rm --no-deps web python -m pytest
-docker compose exec web python mcp_playground.py
-docker compose exec web python rag_playground.py "how do I get around Kyoto"
+docker compose run --rm --no-deps api python -m pytest
+docker compose exec api python mcp_playground.py
+docker compose exec api python rag_playground.py "how do I get around Kyoto"
+curl localhost:8000/api/health
 curl localhost:8001/.well-known/agent-card.json
 
-# needs the key: chat UI at http://localhost:8000 (📎 to upload), or
-curl -X POST localhost:8000/upload -F session_id=demo -F file=@booking.pdf
-curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
+# needs the key: the UI at http://localhost:8080, or the API directly
+curl -X POST localhost:8000/api/upload -F session_id=demo -F file=@booking.pdf
+curl -X POST localhost:8000/api/chat -H 'Content-Type: application/json' \
   -d '{"message":"3 nights in Kyoto for 2 — what to do and cost?","session_id":"demo"}'
-docker compose exec -e TRIP_AGENT=trip_concierge.a2a_agent web python run.py "4 nights in Lisbon for 2, cost?"
+curl localhost:8000/api/sessions/demo   # messages, trip board, documents, connectors
+docker compose exec -e TRIP_AGENT=trip_concierge.a2a_agent api python run.py "4 nights in Lisbon for 2, cost?"
 
-docker compose exec web ls outbox  # dry-run itinerary emails land here
+docker compose exec api ls outbox  # dry-run itinerary emails land here
 docker compose exec postgres psql -U trip -d trip_concierge -c "select user_id, id from sessions"
-docker compose down                # add -v to also delete the stored sessions
+docker compose down                # add -v to also delete stored sessions and uploads
 ```
+
+## API
+
+| Route | Does |
+|---|---|
+| `GET /api/health` | liveness |
+| `GET /api/sessions/{id}` | `{messages, trip, documents, connectors}` — everything the UI shows |
+| `POST /api/chat` | `{session_id, message}` → `{reply, sources, trip}` |
+| `POST /api/upload` | multipart `session_id`, `file` → `{filename, chars, documents}` |
+| `PUT /api/sessions/{id}/connectors/{calendar\|mail}` | `{connected}` → connectors |
 
 ## Layout
 
@@ -127,7 +159,9 @@ trip_concierge/
   rag.py        # dependency-free TF-IDF retriever (search_guides, rank_passages)
   documents.py  # upload text extraction + search_my_documents tool
   websearch.py  # Tavily web_search tool (opt-in via TAVILY_API_KEY)
-  concierge_agent.py  # web concierge: itinerary, cost, agentic RAG, calendar, email, reminders
+  concierge_agent.py  # web concierge: itinerary, cost, agentic RAG, connectors, reminders
+  trip_board.py # trip board state: save_itinerary + after-tool callback
+  connectors.py # Mail / Calendar connectors: per-trip switch + tool guard
   calendar.py   # free/busy (local stub default, Google OAuth opt-in)
   notifications.py    # itinerary email (dry-run by default, never auto-sends)
   reminders.py  # local reminder store
@@ -138,52 +172,40 @@ data/calendar_stub.json  # sample busy slots for the calendar stub
 mcp_server/
   server.py     # FastMCP server exposing the two tools over stdio
 budget_service.py  # budget agent served as an A2A service (to_a2a)
-web/
-  app.py        # FastAPI backend (injectable reply) + routes
-  agent_runner.py  # session-aware ADK runner (Postgres via SESSION_DB_URL, else in-memory)
-  static/index.html  # dependency-free browser chat UI with file upload
+backend/
+  app.py        # FastAPI API (/api/...), injectable service for tests
+  agent_runner.py  # ADK runner: sessions (Postgres or memory), uploads, trip view
+frontend/       # React + Vite UI; Dockerfile builds it and serves it with nginx
+  src/components/  # Chat, TripBoard, Connectors
 run.py          # minimal CLI runner
 mcp_playground.py  # list + call the MCP tools directly, no LLM
 rag_playground.py  # rank guide passages for a query, no LLM
-tests/          # structure, tool, MCP, A2A, RAG, Phase 5, and web tests
+tests/          # structure, tools, MCP, A2A, RAG, API, sessions, trip board, connectors
 ```
 
 ## How a request flows
 
-Walking one message through the web app (Phase 6), end to end:
-
-> **"3 nights in Kyoto — what should I do and what will it cost for 2 people?"**
+> **"Plan 3 nights in Kyoto for 2 — what should we do and what will it cost?"**
 
 ```
-Browser (index.html)            FastAPI (web/app.py)      ADK (agent_runner.py)        Gemini + tools
-      │                               │                          │                          │
- 1. GET /  ──────────────────────────▶ index() → index.html     │                          │
- 2. JS makes a per-visitor session id │                          │                          │
- 3. POST /chat {message, session_id} ─▶ chat() ─await reply()──▶ reply(client_id, msg)      │
-      │                               │                     4. new ADK session (first time)  │
-      │                               │                     5. run_async(root_agent, msg) ──▶ model reasons
-      │                               │                          │                     6. tool calls ↓
-      │                               │                          │◀── find_attractions("Kyoto")
-      │                               │                          │◀── estimate_trip_cost("Kyoto",3,2)
-      │                               │                     7. collect final text ◀───────── model composes
- 8. {reply} ◀──────────────────────────────────────────────────┘                          │
- 9. JS swaps the "…" bubble for the reply
+Browser (React)         nginx (frontend)     FastAPI (backend)       ADK runner                Gemini + tools
+ 1. POST /api/chat ──────▶ proxy /api ───────▶ chat() ──────────────▶ run_async(concierge) ────▶ model plans
+                                                                       │◀── find_attractions("Kyoto")
+                                                                       │◀── estimate_trip_cost("Kyoto", 3, 2)
+                                                                       │◀── save_itinerary(...)
+                                                                  2. after-tool callback writes
+                                                                     budget / attractions / days
+                                                                     into session state (Postgres)
+                                                                  3. messages + cited sources rebuilt
+                                                                     from the stored events
+ 4. {reply, sources, trip} ◀────────────────────────────────────────┘
+ 5. chat shows the reply + source chips; the trip board re-renders from `trip`
 ```
 
-1. **Page load** — `GET /` serves `web/static/index.html`; its JS creates a per-visitor id (e.g. `web-k3f9x`) so the server can keep conversation continuity.
-2. **Send** — the browser `POST`s `/chat` with the message and session id; a "…" placeholder appears.
-3. **FastAPI** — `/chat` validates the body and `await`s the injected `reply(session_id, message)` callable.
-4. **Session** — `ConciergeRunner.reply` creates a fresh ADK session the first time it sees a session id, and reuses it on later turns (so follow-ups have context).
-5. **Agent run** — the message is wrapped in `types.Content` and passed to `runner.run_async` on the `trip_concierge_plus` agent.
-6. **Tools** — ADK sends the instruction, message and tool declarations to Gemini, which calls the Python tools in-process (`find_attractions`, `estimate_trip_cost` → `140 × 3 × 2 = 1120`); each result is fed back to the model.
-7. **Answer** — grounded in the tool outputs, the model writes a short combined reply; `reply()` concatenates the text parts.
-8. **Response** — `/chat` returns `{ "reply": "..." }`.
-9. **Render** — the browser replaces the placeholder with the answer.
-
-Side-effecting actions stay safe: `schedule_reminder` writes to a local store, and
-`send_itinerary` **dry-runs to `outbox/`** and only sends with explicit opt-in. The
-other phases are alternative entry points that change *how* a capability is served
-(MCP, A2A, RAG) over the same tools — see the commands above.
+On reload the UI calls `GET /api/sessions/{id}` and gets the same conversation,
+board and connector switches back. Side-effecting actions stay safe:
+`schedule_reminder` writes to a local store, `send_itinerary` **dry-runs to
+`outbox/`**, and both mail and calendar tools need their connector switched on.
 
 ## Roadmap
 
@@ -193,3 +215,6 @@ other phases are alternative entry points that change *how* a capability is serv
 - [x] Phase 4 — RAG over destination guides (TF-IDF retriever + cited answers)
 - [x] Phase 5 — calendar OAuth, itinerary email (dry-run) + reminders
 - [x] Phase 6 — FastAPI backend + browser chat UI
+- [x] Phase 7 — agentic RAG (files, guides, Tavily), uploads, Postgres sessions
+- [x] Phase 8 — separate React frontend with trip board, Mail/Calendar connectors
+- [ ] Next — real Google / Microsoft sign-in for the connectors

@@ -8,7 +8,7 @@ import asyncio
 import pytest
 from google.adk.sessions import InMemorySessionService
 
-from web.agent_runner import APP, ConciergeRunner, make_session_service
+from backend.agent_runner import APP, ConciergeRunner, make_session_service
 
 
 def test_defaults_to_in_memory(monkeypatch):

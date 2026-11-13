@@ -19,11 +19,13 @@ from google.adk.agents import Agent
 
 from .agent import MODEL
 from .calendar import free_slots
+from .connectors import guard_connectors
 from .documents import search_my_documents
 from .notifications import send_itinerary
 from .rag import search_guides
 from .reminders import schedule_reminder
 from .tools import estimate_trip_cost, find_attractions
+from .trip_board import record_trip_state, save_itinerary
 from .websearch import web_search
 
 WEB_SEARCH_ENABLED = bool(os.getenv("TAVILY_API_KEY"))
@@ -61,11 +63,17 @@ root_agent = Agent(
         "You are a trip concierge. Use find_attractions to shape the itinerary, "
         "estimate_trip_cost for budget questions (ask for any missing city, "
         "nights or travellers first), "
+        "save_itinerary every time you propose or change a day-by-day plan (it "
+        "shows on the traveller's trip board), "
         "free_slots to find open time on a given date, send_itinerary to prepare "
         "the itinerary email, and schedule_reminder for follow-ups. "
         "send_itinerary only drafts a dry run by default — tell the traveller the "
         "email is a draft for them to review and never say it was sent unless the "
-        "tool result status is 'sent'. Keep replies warm and brief.\n\n" + _RETRIEVAL
+        "tool result status is 'sent'. "
+        "free_slots and send_itinerary belong to the Calendar and Mail connectors, "
+        "which the traveller switches on per trip; if a tool says its connector is "
+        "off, tell them to turn it on under Connectors and don't retry. "
+        "Keep replies warm and brief.\n\n" + _RETRIEVAL
     ),
     tools=[
         find_attractions,
@@ -73,8 +81,13 @@ root_agent = Agent(
         free_slots,
         send_itinerary,
         schedule_reminder,
+        save_itinerary,
         search_my_documents,
         search_guides,
         *([web_search] if WEB_SEARCH_ENABLED else []),
     ],
+    # Calendar/Mail tools only run while their connector is on for this trip.
+    before_tool_callback=guard_connectors,
+    # Mirrors tool results (budget, attractions, reminders, drafts) onto the trip board.
+    after_tool_callback=record_trip_state,
 )

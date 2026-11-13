@@ -27,6 +27,9 @@ outbox
 reminders.json
 uploads
 
+# The frontend has its own image (frontend/Dockerfile)
+frontend
+
 # Docker's own files aren't needed inside the image
 Dockerfile
 compose.yaml
