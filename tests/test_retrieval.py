@@ -87,14 +87,14 @@ def test_search_my_documents_ranks_uploaded_files():
 def test_upload_is_stored_for_that_session_only():
     artifacts = InMemoryArtifactService()
     runner = ConciergeRunner(InMemorySessionService(), artifacts)
-    stored = asyncio.run(runner.upload("web-a", "hotel.txt", "Check-in 3pm"))
+    stored = asyncio.run(runner.upload("u1", "trip-a", "hotel.txt", "Check-in 3pm"))
     assert stored["filename"] == "hotel.txt"
 
-    async def keys(client):
-        return await artifacts.list_artifact_keys(app_name=APP, user_id=client, session_id=client)
+    async def keys(trip):
+        return await artifacts.list_artifact_keys(app_name=APP, user_id="u1", session_id=trip)
 
-    assert asyncio.run(keys("web-a")) == ["hotel.txt"]
-    assert asyncio.run(keys("web-b")) == []
+    assert asyncio.run(keys("trip-a")) == ["hotel.txt"]
+    assert asyncio.run(keys("trip-b")) == []
 
 
 def test_web_search_without_key(monkeypatch):

@@ -9,12 +9,33 @@ export const KIND = {
   activity: { icon: "star", label: "Activity", from: "Where", to: null, ref: "Booking ref", start: "Starts", end: "Ends" },
 };
 
-const when = (iso) =>
-  iso
-    ? new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
-    : "";
+// Show each time in the zone where it happens, with its abbreviation ("21:30 IST").
+const when = (utc, local, tz) => {
+  if (!utc && !local) return "";
+  const opts = { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" };
+  try {
+    if (utc && tz) return new Date(utc.replace(/Z$/, ":00Z")).toLocaleString(undefined, { ...opts, timeZone: tz, timeZoneName: "short" });
+  } catch {}
+  return new Date(local).toLocaleString(undefined, opts); // older items without a zone
+};
 
-const EMPTY = { kind: "train", title: "", starts_at: "", ends_at: "", from_place: "", to_place: "", reference: "" };
+const HERE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const ZONES = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [HERE];
+const EMPTY = { kind: "train", title: "", starts_at: "", ends_at: "", from_place: "", to_place: "", reference: "", start_tz: HERE, end_tz: "" };
+
+function ZonePicker({ label, value, onChange, optional }) {
+  return (
+    <label>
+      {label}
+      <select aria-label={label} value={value} onChange={onChange}>
+        {optional && <option value="">Same as departure</option>}
+        {[...new Set([HERE, ...ZONES])].map((z) => (
+          <option key={z} value={z}>{z}{z === HERE ? " (this device)" : ""}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 function AddForm({ onAdd, onCancel }) {
   const [f, setF] = useState(EMPTY);
@@ -66,6 +87,8 @@ function AddForm({ onAdd, onCancel }) {
         {k.end} <span className="muted">(optional)</span>
         <input aria-label={k.end} type="datetime-local" value={f.ends_at} onChange={set("ends_at")} min={f.starts_at || undefined} />
       </label>
+      <ZonePicker label={`${k.start} time zone`} value={f.start_tz} onChange={set("start_tz")} />
+      {k.to && <ZonePicker label={`${k.end} time zone`} value={f.end_tz} onChange={set("end_tz")} optional />}
       <label>
         {k.from}
         <input aria-label={k.from} value={f.from_place} onChange={set("from_place")} />
@@ -124,9 +147,9 @@ export default function Timeline({ items, onAdd, onRemove }) {
                     {it.reference && <span className="badge">{it.reference}</span>}
                   </p>
                   <p className="muted small">
-                    {k.start} {when(it.starts_at)}
+                    {k.start} {when(it.starts_utc, it.starts_at, it.start_tz)}
                     {it.from_place ? ` · ${it.from_place}` : ""}
-                    {it.ends_at ? ` → ${k.end.toLowerCase()} ${when(it.ends_at)}` : ""}
+                    {it.ends_at ? ` → ${k.end.toLowerCase()} ${when(it.ends_utc, it.ends_at, it.end_tz || it.start_tz)}` : ""}
                     {it.to_place ? ` · ${it.to_place}` : ""}
                   </p>
                 </div>

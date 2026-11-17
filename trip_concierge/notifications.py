@@ -74,7 +74,8 @@ def send_itinerary(to: str, subject: str, body: str, tool_context: Optional[Tool
     """
     if tool_context is not None:
         try:
-            account = accounts.access_token(tool_context.state, "mail")
+            sender_provider = accounts.mail_sender(tool_context.state)
+            account = accounts.access_token(tool_context.state, sender_provider) if sender_provider else None
         except Exception as exc:
             return {"error": f"Mail sign-in problem: {exc}"}
         if account:

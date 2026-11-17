@@ -17,7 +17,7 @@ from typing import Callable, Optional
 
 from google.adk.tools.tool_context import ToolContext
 
-from .accounts import PROVIDERS, access_token, api_request
+from .accounts import PROVIDERS, access_token, api_request, connected
 
 _STUB = Path(__file__).resolve().parent.parent / "data" / "calendar_stub.json"
 # Candidate hour slots for a day: 09:00 through 17:00.
@@ -109,21 +109,29 @@ def free_slots(date: str, tool_context: Optional[ToolContext] = None) -> dict:
     Returns:
         A dict with the date, the list of free slots, and which calendar answered.
     """
-    if tool_context is not None:
-        try:
-            account = access_token(tool_context.state, "calendar")
-            if account:
-                provider, token, who = account
+    linked = connected(tool_context.state) if tool_context is not None else []
+    if linked:
+        # Busy in any connected calendar (e.g. work Outlook + personal Google) = busy.
+        busy, read_from, problems = set(), [], []
+        for provider in linked:
+            try:
+                _, token, who = access_token(tool_context.state, provider)
                 read = _busy_from_google if provider == "google" else _busy_from_microsoft
-                busy = read(date, token)
-                return {
-                    "date": date,
-                    "provider": f"{PROVIDERS[provider]['label']} Calendar ({who})",
-                    "timezone": "UTC",
-                    "free_slots": [slot for slot in WORKDAY if slot not in busy],
-                }
-        except Exception as exc:  # expired sign-in, network, API error
-            return {"error": f"Couldn't read the connected calendar: {exc}"}
+                busy |= read(date, token)
+                read_from.append(f"{PROVIDERS[provider]['label']} Calendar ({who})")
+            except Exception as exc:  # expired sign-in, network, API error
+                problems.append(f"{PROVIDERS[provider]['label']}: {exc}")
+        if not read_from:
+            return {"error": "Couldn't read the connected calendars: " + "; ".join(problems)}
+        result = {
+            "date": date,
+            "provider": " + ".join(read_from),
+            "timezone": "UTC",
+            "free_slots": [slot for slot in WORKDAY if slot not in busy],
+        }
+        if problems:
+            result["warning"] = "Some calendars couldn't be read: " + "; ".join(problems)
+        return result
     provider = os.getenv("TRIP_CONCIERGE_CALENDAR", "stub")
     if provider == "google":
         token = os.getenv("GOOGLE_CALENDAR_TOKEN")

@@ -14,3 +14,9 @@ pypdf>=6,<8
 tavily-python>=0.7,<1
 # Encrypts stored OAuth tokens for the Mail/Calendar connectors (ENCRYPTION_KEY).
 cryptography>=42
+# Accounts, trips and memories (SQL), media storage and photo metadata.
+aiosqlite>=0.20
+boto3>=1.34
+pillow>=10
+# IANA time-zone data for zoneinfo (slim images may not ship it).
+tzdata

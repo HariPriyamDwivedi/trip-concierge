@@ -68,6 +68,28 @@ notifications allowed, they pop up while the app is open.
 month, and the concierge answers "where should I go in December?" from a curated
 best-months table (`seasonal_destinations`).
 
+**Accounts**: sign in with your email or user ID and a 6-digit code emailed to
+you (SMTP; in local dev the code is printed in the API log). Each user owns their
+trips — the trip id is the ADK session id and the account id is the ADK user id —
+and has a profile (name, user ID, home city, home time zone) and a list of past and
+upcoming trips.
+
+**Memories**: keep photos, videos and any other files from a trip — upload many at
+once, drag and drop, or take them with the camera (photo or video, optional
+location). Stored in S3 (private, presigned links) or on disk; photos get a
+thumbnail plus capture time and GPS from EXIF. Browse them Google Photos–style by
+date, place or trip, open them in a viewer to caption, re-place or move them, and
+see each trip's memories on its board. The **map** shows every place you have
+memories from, zoomable from the world down to the street.
+
+**Time zones** follow the usual enterprise rules: instants are stored in UTC
+(`timestamptz`); anything that happens somewhere keeps its local wall-clock time
+plus that place's IANA zone (`Asia/Kolkata`, never a fixed offset, so daylight
+saving is right) — a flight departs in one zone and lands in another; each user
+has a home zone for reminders and display; APIs speak ISO 8601 with an offset or
+`Z`; alerts are scheduled as UTC instants and shown in the local zone of the event
+("06:00 IST").
+
 Replies **stream** in as Gemini writes them, with a live "Searching your files…"
 style status while tools run.
 
@@ -158,20 +180,19 @@ docker compose down                # add -v to also delete stored sessions and u
 
 ## API
 
-| Route | Does |
+All routes are under `/api`; everything except `health`, `seasonal` and `auth/*`
+needs a signed-in user (session cookie or `Authorization: Bearer`), and trip routes
+only answer for trips you own. The full list lives at the top of
+[backend/app.py](backend/app.py).
+
+| Area | Routes |
 |---|---|
-| `GET /api/health` | liveness |
-| `GET /api/sessions/{id}` | `{messages, trip, documents, connectors, notifications}` — everything the UI shows |
-| `POST /api/chat` | `{session_id, message}` → `{reply, sources, trip}` |
-| `POST /api/chat/stream` | same body; server-sent events `tool`, `delta`, `done` (or `error`) |
-| `POST /api/upload` | multipart `session_id`, `file` → `{filename, chars, documents}` |
-| `PUT /api/sessions/{id}/connectors/{calendar\|mail}` | `{connected}` → connectors |
-| `DELETE /api/sessions/{id}/connectors/{connector}/account` | sign out of Google/Microsoft |
-| `GET /api/oauth/{google\|microsoft}/start?session_id=&connector=` | redirect to the provider's sign-in |
-| `GET /oauth/callback` | provider redirect (nginx → `/api/oauth/callback`) |
-| `POST /api/sessions/{id}/items` | add a train/flight/bus/stay/activity → `{trip, notifications}` |
-| `DELETE /api/sessions/{id}/items/{item_id}` | remove it |
-| `GET /api/seasonal?when=November` | destinations in season / to avoid (month or season) |
+| Auth & profile | `POST auth/request-code {identifier}` · `POST auth/verify {identifier, code}` · `POST auth/logout` · `GET/PATCH me` |
+| Trips | `GET/POST trips` · `GET/PATCH trips/{id}` · `POST trips/{id}/chat` · `POST trips/{id}/chat/stream` (SSE) · `POST trips/{id}/documents` |
+| Bookings & alerts | `POST trips/{id}/items` · `DELETE trips/{id}/items/{item}` |
+| Connectors | `PUT trips/{id}/connectors/{calendar\|mail}` · `DELETE …/account` · `GET oauth/{google\|microsoft}/start` · `GET oauth/callback` |
+| Memories & map | `POST media` (multipart) · `GET media?trip_id=&kind=&place=` · `PATCH/DELETE media/{id}` · `GET media/{id}/{original\|thumb}` · `GET places` |
+| Public | `GET health` · `GET seasonal?when=November` |
 
 ## Layout
 
@@ -201,10 +222,14 @@ mcp_server/
   server.py     # FastMCP server exposing the two tools over stdio
 budget_service.py  # budget agent served as an A2A service (to_a2a)
 backend/
-  app.py        # FastAPI API (/api/...), injectable service for tests
+  app.py        # FastAPI API (/api/...): auth, trips, chat, memories, map
+  auth.py       # email / user-ID one-time codes, sessions
+  db.py         # users, trips, login codes, media (SQLAlchemy)
+  media.py      # uploads, EXIF time + GPS, thumbnails, geocoding, map pins
+  storage.py    # S3 (presigned links) or local disk
   agent_runner.py  # ADK runner: sessions (Postgres or memory), uploads, trip view
 frontend/       # React + Vite UI; Dockerfile builds it and serves it with nginx
-  src/components/  # Chat, TripBoard, Timeline, Notifications, Connectors
+  src/components/  # PlanView (Chat + TripBoard), Trips, Memories, Camera, MapView, Profile, Login
 run.py          # minimal CLI runner
 mcp_playground.py  # list + call the MCP tools directly, no LLM
 rag_playground.py  # rank guide passages for a query, no LLM
@@ -247,5 +272,8 @@ board and connector switches back. Side-effecting actions stay safe:
 - [x] Phase 8 — separate React frontend with trip board, Mail/Calendar connectors
 - [x] Phase 9 — streaming replies, Google/Microsoft sign-in for connectors,
   trip alerts (boarding, arrival, check-in, activities), season-wise picks
+- [x] Phase 10 — accounts (email/user-ID one-time codes), profile, past trips,
+  memories (S3, camera, EXIF, gallery), world map, time zones
+- [ ] Next — reels and posts from memories with Snapchat/Instagram-style filters
 - [ ] Next — push alerts when the app is closed (service worker + Web Push), live
   PNR / train running status from a rail data API

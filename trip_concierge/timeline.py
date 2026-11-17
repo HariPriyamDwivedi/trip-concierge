@@ -5,12 +5,19 @@ the UI or by the agent (`add_trip_item`, e.g. from an uploaded booking). Alerts
 are derived from the items, modelled on what travel apps send: ixigo's wake-up
 alarm before your station, ConfirmTkt's chart-prepared update ~4 h before a
 train, airline check-in and boarding reminders, and hostel check-in / activity
-reminders. Times are the traveller's local time (ISO, no zone), as entered.
+reminders.
+
+Time zones, the way travel systems do it: each time is stored as the local wall
+clock where it happens plus that place's IANA zone (`starts_at` + `start_tz`,
+`ends_at` + `end_tz`; a flight departs in one zone and lands in another), and
+every alert is scheduled as a UTC instant (`due_at` ends in "Z"). Text shows the
+local time with its zone abbreviation (e.g. "06:00 IST").
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from google.adk.tools.tool_context import ToolContext
 
@@ -48,7 +55,23 @@ _RULES: dict[str, list[tuple[timedelta, str, str, str]]] = {
 def _parse(value: Optional[str]) -> Optional[datetime]:
     if not value:
         return None
-    return datetime.fromisoformat(value[:19])  # local time as entered; any zone suffix ignored
+    return datetime.fromisoformat(value[:19])  # wall-clock time; its zone is stored separately
+
+
+def zone(name: Optional[str]) -> ZoneInfo:
+    try:
+        return ZoneInfo(name or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError(f"unknown time zone {name!r}; use an IANA name like Asia/Kolkata") from None
+
+
+def _instant(local: Optional[datetime], tz: Optional[str]) -> Optional[datetime]:
+    """Wall-clock time in a zone -> aware datetime (DST-correct)."""
+    return local.replace(tzinfo=zone(tz)) if local else None
+
+
+def _utc(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="minutes").replace("+00:00", "Z")
 
 
 def new_item(
@@ -59,6 +82,8 @@ def new_item(
     from_place: Optional[str] = None,
     to_place: Optional[str] = None,
     reference: Optional[str] = None,
+    start_tz: Optional[str] = None,
+    end_tz: Optional[str] = None,
 ) -> dict:
     """A validated timeline item. Raises ValueError for bad input."""
     if kind not in KINDS:
@@ -68,22 +93,32 @@ def new_item(
     start, end = _parse(starts_at), _parse(ends_at)
     if start is None:
         raise ValueError("starts_at is required, e.g. 2027-03-14T08:15")
-    if end and end < start:
-        raise ValueError("ends_at is before starts_at")
+    start_tz = start_tz or "UTC"
+    end_tz = end_tz or start_tz
+    if end and _instant(end, end_tz) < _instant(start, start_tz):
+        raise ValueError("ends_at is before starts_at (check the time zones)")
     return {
         "id": uuid.uuid4().hex[:10],
         "kind": kind,
         "title": title.strip()[:120],
         "starts_at": start.isoformat(timespec="minutes"),
+        "start_tz": zone(start_tz).key,
         "ends_at": end.isoformat(timespec="minutes") if end else None,
+        "end_tz": zone(end_tz).key if end else None,
+        "starts_utc": _utc(_instant(start, start_tz)),
+        "ends_utc": _utc(_instant(end, end_tz)) if end else None,
         "from_place": (from_place or "").strip()[:80] or None,
         "to_place": (to_place or "").strip()[:80] or None,
         "reference": (reference or "").strip()[:40] or None,
     }
 
 
+def _sort_key(item: dict) -> str:
+    return item.get("starts_utc") or item["starts_at"]
+
+
 def with_item(items: list, item: dict) -> list:
-    return sorted([*items, item], key=lambda i: i["starts_at"])
+    return sorted([*items, item], key=_sort_key)
 
 
 def add_trip_item(
@@ -95,6 +130,8 @@ def add_trip_item(
     from_place: Optional[str] = None,
     to_place: Optional[str] = None,
     reference: Optional[str] = None,
+    start_timezone: Optional[str] = None,
+    end_timezone: Optional[str] = None,
 ) -> dict:
     """Add a train, flight, bus, stay or activity to the trip timeline so the
     traveller gets alerts (boarding, arrival wake-up, check-in, start time).
@@ -109,27 +146,34 @@ def add_trip_item(
         from_place: Departure station/airport, or the venue for a stay/activity.
         to_place: Arrival station/airport.
         reference: PNR, flight number or booking reference, if any.
+        start_timezone: IANA zone where it starts, e.g. "Asia/Kolkata" for Delhi.
+            Defaults to the traveller's home zone.
+        end_timezone: IANA zone where it ends, if different (e.g. a flight
+            landing in "Asia/Tokyo").
 
     Returns:
         The saved item, or an error explaining what to fix.
     """
     try:
-        item = new_item(kind, title, starts_at, ends_at, from_place, to_place, reference)
+        home = tool_context.state.get("user:timezone", "UTC")
+        item = new_item(kind, title, starts_at, ends_at, from_place, to_place, reference,
+                        start_timezone or home, end_timezone or start_timezone or home)
     except ValueError as exc:
         return {"error": str(exc)}
     tool_context.state[ITEMS_KEY] = with_item(tool_context.state.get(ITEMS_KEY, []), item)
     return {"status": "added", "item": item}
 
 
-def _fmt(dt: Optional[datetime]) -> str:
-    return dt.strftime("%H:%M") if dt else "?"
+def _fmt(value: Optional[datetime]) -> str:
+    return f"{value:%H:%M} {value.tzname()}" if value else "?"
 
 
-def notifications(items: list[dict], reminders: list[dict] | None = None) -> list[dict]:
-    """Every alert for the trip, soonest first: {id, item_id, kind, title, body, due_at}."""
+def notifications(items: list[dict], reminders: list[dict] | None = None, home_tz: str = "UTC") -> list[dict]:
+    """Every alert for the trip, soonest first: {id, item_id, kind, title, body, due_at (UTC)}."""
     out = []
     for item in items:
-        start, end = _parse(item["starts_at"]), _parse(item.get("ends_at"))
+        start = _instant(_parse(item["starts_at"]), item.get("start_tz"))
+        end = _instant(_parse(item.get("ends_at")), item.get("end_tz") or item.get("start_tz"))
         fields = {
             "title": item["title"],
             "from_place": item.get("from_place") or "the station",
@@ -152,11 +196,11 @@ def notifications(items: list[dict], reminders: list[dict] | None = None) -> lis
                     "kind": item["kind"],
                     "title": title,
                     "body": body.format(**fields),
-                    "due_at": (base + offset).isoformat(timespec="minutes"),
+                    "due_at": _utc(base + offset),
                 }
             )
     for r in reminders or []:
-        when = _parse(r.get("remind_at"))
+        when = _instant(_parse(r.get("remind_at")), home_tz)
         if when:
             out.append(
                 {
@@ -165,11 +209,12 @@ def notifications(items: list[dict], reminders: list[dict] | None = None) -> lis
                     "kind": "reminder",
                     "title": "Reminder",
                     "body": r.get("message", ""),
-                    "due_at": when.isoformat(timespec="minutes"),
+                    "due_at": _utc(when),
                 }
             )
     if items:  # "upcoming trip" heads-ups before the first item
-        first = min(_parse(i["starts_at"]) for i in items)
+        first_item = min(items, key=lambda i: _instant(_parse(i["starts_at"]), i.get("start_tz")))
+        first = _instant(_parse(first_item["starts_at"]), first_item.get("start_tz"))
         for days, label in ((7, "in a week"), (1, "tomorrow")):
             out.append(
                 {
@@ -177,8 +222,8 @@ def notifications(items: list[dict], reminders: list[dict] | None = None) -> lis
                     "item_id": None,
                     "kind": "trip",
                     "title": f"Your trip starts {label}",
-                    "body": f"First up: {min(items, key=lambda i: i['starts_at'])['title']} on {first:%a %d %b at %H:%M}.",
-                    "due_at": (first - timedelta(days=days)).isoformat(timespec="minutes"),
+                    "body": f"First up: {first_item['title']} on {first:%a %d %b at %H:%M} {first.tzname()}.",
+                    "due_at": _utc(first - timedelta(days=days)),
                 }
             )
     return sorted(out, key=lambda n: n["due_at"])

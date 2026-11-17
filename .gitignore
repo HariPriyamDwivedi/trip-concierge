@@ -19,6 +19,8 @@ htmlcov/
 outbox/
 reminders.json
 uploads/
+media/
+trip_concierge.db
 
 # Frontend build output and dependencies
 node_modules/

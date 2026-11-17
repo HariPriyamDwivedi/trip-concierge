@@ -26,6 +26,10 @@ services:
       BUDGET_AGENT_URL: http://budget:8001
       SESSION_DB_URL: postgresql+asyncpg://trip:trip@postgres:5432/trip_concierge
       UPLOAD_DIR: /app/uploads
+      # Memories go to S3 when S3_ATTACHMENTS_BUCKET (or MEDIA_BUCKET) is in .env, under this prefix;
+      # otherwise to MEDIA_DIR on the volume below.
+      MEDIA_PREFIX: trip-concierge
+      MEDIA_DIR: /app/uploads/media
     volumes: [uploads_data:/app/uploads]
     depends_on:
       budget: {condition: service_started}

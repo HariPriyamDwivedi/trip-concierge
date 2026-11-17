@@ -26,6 +26,8 @@ htmlcov
 outbox
 reminders.json
 uploads
+media
+trip_concierge.db
 
 # The frontend has its own image (frontend/Dockerfile)
 frontend

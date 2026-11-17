@@ -64,7 +64,7 @@ function Sources({ sources }) {
 
 const linkNewTab = { a: (props) => <a {...props} target="_blank" rel="noreferrer" /> };
 
-export default function Chat({ messages, sending, notice, onDismissNotice, onSend, onUpload, seasonal }) {
+export default function Chat({ messages, sending, notice, onDismissNotice, onSend, onUpload, onCamera, seasonal }) {
   const [draft, setDraft] = useState("");
   const logRef = useRef(null);
   const fileRef = useRef(null);
@@ -167,16 +167,21 @@ export default function Chat({ messages, sending, notice, onDismissNotice, onSen
       )}
 
       <form className="composer" onSubmit={submit}>
-        <input ref={fileRef} type="file" accept=".txt,.md,.pdf" hidden onChange={pickFile} />
+        <input ref={fileRef} type="file" hidden onChange={pickFile} />
         <button
           type="button"
           className="icon-btn"
           onClick={() => fileRef.current?.click()}
-          aria-label="Attach a file (.txt, .md or .pdf, max 5 MB)"
-          title="Attach a booking or notes (.txt, .md, .pdf)"
+          aria-label="Attach a file"
+          title="Attach: bookings and notes (.txt, .md, .pdf) for the concierge to read; photos, videos and other files go to this trip's memories"
         >
           <Icon name="clip" />
         </button>
+        {onCamera && (
+          <button type="button" className="icon-btn" onClick={onCamera} aria-label="Open camera" title="Take a photo or video">
+            <Icon name="camera" />
+          </button>
+        )}
         <textarea
           ref={inputRef}
           rows={1}

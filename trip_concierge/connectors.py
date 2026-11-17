@@ -7,14 +7,15 @@ reads the inbox nor changes the calendar.
 
 The on/off switch lives in ADK session state (so it persists with the trip), and
 `guard_connectors` (a before-tool callback) blocks a tool whose connector is off.
-Signing in with Google or Microsoft (accounts.py) makes a connector use the
-traveller's real calendar or mailbox; without it, the demo providers below apply.
+Signing in with Google and/or Microsoft (accounts.py, one sign-in per provider)
+connects the real calendar(s) and mailbox for both connectors; without it, the
+demo providers below apply.
 """
 
 import os
 from typing import Any, Optional
 
-from .accounts import account_view, available_providers
+from .accounts import PROVIDERS, account_view, available_providers, connected, mail_sender
 
 STATE_PREFIX = "connector_"
 
@@ -46,28 +47,44 @@ def _provider(connector_id: str) -> dict:
     return {"provider": "Drafts only (saved locally, nothing is sent)", "mode": "demo"}
 
 
+def _live(state: dict, cid: str) -> Optional[dict]:
+    """Provider line for a connector served by signed-in accounts, else None."""
+    if cid == "calendar":
+        views = [account_view(state, p) for p in connected(state)]
+        if views:
+            return {"provider": " + ".join(f"{v['label']} · {v['account']}" for v in views), "mode": "live"}
+        return None
+    sender = mail_sender(state)
+    if sender:
+        v = account_view(state, sender)
+        return {"provider": f"Sends from {v['account']} ({v['label']})", "mode": "live"}
+    return None
+
+
 def connectors_view(state: dict) -> list[dict]:
-    views = []
-    for cid, c in CONNECTORS.items():
-        account = account_view(state, cid)
-        provider = (
-            {"provider": f"{account['label']} · {account['account']}", "mode": "live"}
-            if account
-            else _provider(cid)
-        )
-        views.append(
-            {
-                "id": cid,
-                "name": c["name"],
-                "purpose": c["purpose"],
-                "limits": c["limits"],
-                **provider,
-                "account": account,
-                "sign_in": available_providers(),
-                "connected": bool(state.get(STATE_PREFIX + cid)),
-            }
-        )
-    return views
+    return [
+        {
+            "id": cid,
+            "name": c["name"],
+            "purpose": c["purpose"],
+            "limits": c["limits"],
+            **(_live(state, cid) or _provider(cid)),
+            "connected": bool(state.get(STATE_PREFIX + cid)),
+        }
+        for cid, c in CONNECTORS.items()
+    ]
+
+
+def accounts_view(state: dict) -> dict:
+    """Google / Microsoft sign-in status for the Connectors menu (no tokens)."""
+    available = available_providers()
+    return {
+        "providers": [
+            {"id": p, "label": PROVIDERS[p]["label"], "available": p in available, "account": account_view(state, p)}
+            for p in PROVIDERS
+        ],
+        "mail_from": mail_sender(state),
+    }
 
 
 def guard_connectors(tool: Any, args: dict, tool_context: Any) -> Optional[dict]:

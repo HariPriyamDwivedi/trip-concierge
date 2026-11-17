@@ -5,12 +5,10 @@ traveller turns them on for the trip, and the switch persists in the session.
 import asyncio
 from types import SimpleNamespace
 
-from fastapi.testclient import TestClient
 from google.adk.artifacts import InMemoryArtifactService
 from google.adk.sessions import InMemorySessionService
 
 from backend.agent_runner import ConciergeRunner
-from backend.app import create_app
 from trip_concierge.connectors import connectors_view, guard_connectors
 
 
@@ -38,20 +36,20 @@ def test_view_describes_trip_purpose_and_safe_defaults(monkeypatch):
 
 def test_switch_persists_in_the_session():
     runner = ConciergeRunner(InMemorySessionService(), InMemoryArtifactService())
-    after_on = asyncio.run(runner.set_connector("trip-1", "calendar", True))
+    after_on = asyncio.run(runner.set_connector("u1", "trip-1", "calendar", True))
     assert {c["id"]: c["connected"] for c in after_on} == {"calendar": True, "mail": False}
-    view = asyncio.run(runner.view("trip-1"))
+    view = asyncio.run(runner.view("u1", "trip-1"))
     assert [c["connected"] for c in view["connectors"] if c["id"] == "calendar"] == [True]
     assert view["messages"] == []  # toggling adds no chat message
-    asyncio.run(runner.set_connector("trip-1", "calendar", False))
-    assert not any(c["connected"] for c in asyncio.run(runner.view("trip-1"))["connectors"])
+    asyncio.run(runner.set_connector("u1", "trip-1", "calendar", False))
+    assert not any(c["connected"] for c in asyncio.run(runner.view("u1", "trip-1"))["connectors"])
 
 
-def test_api_route():
-    runner = ConciergeRunner(InMemorySessionService(), InMemoryArtifactService())
-    client = TestClient(create_app(service=runner))
-    resp = client.put("/api/sessions/trip-2/connectors/mail", json={"connected": True})
+def test_api_route(make_client):
+    client = make_client(ConciergeRunner(InMemorySessionService(), InMemoryArtifactService()))
+    trip = client.post("/api/trips", json={}).json()["id"]
+    resp = client.put(f"/api/trips/{trip}/connectors/mail", json={"connected": True})
     assert resp.status_code == 200
     assert {c["id"]: c["connected"] for c in resp.json()}["mail"] is True
-    assert client.put("/api/sessions/trip-2/connectors/slack", json={"connected": True}).status_code == 404
-    assert client.put("/api/sessions/bad%20id/connectors/mail", json={"connected": True}).status_code == 422
+    assert client.put(f"/api/trips/{trip}/connectors/slack", json={"connected": True}).status_code == 404
+    assert client.put("/api/trips/trip-not-mine/connectors/mail", json={"connected": True}).status_code == 404

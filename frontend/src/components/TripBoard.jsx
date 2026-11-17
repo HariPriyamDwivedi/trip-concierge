@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import Icon from "./Icon.jsx";
 import Timeline from "./Timeline.jsx";
+import { Tile } from "./Memories.jsx";
 
 const usd = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
@@ -75,7 +76,7 @@ function Empty({ children, ask, onAsk, busy }) {
   );
 }
 
-export default function TripBoard({ trip, documents, onUpload, onAsk, busy, onAddItem, onRemoveItem }) {
+export default function TripBoard({ trip, documents, onUpload, onAsk, busy, onAddItem, onRemoveItem, memories = [], onOpenMemory, onCamera }) {
   const fileRef = useRef(null);
   const city = trip.city;
   const budget = trip.budget;
@@ -100,6 +101,31 @@ export default function TripBoard({ trip, documents, onUpload, onAsk, busy, onAd
 
       <div className="grid">
         <Timeline items={trip.items || []} onAdd={onAddItem} onRemove={onRemoveItem} />
+
+        <section className="card span-2">
+          <header className="card-head">
+            <h2>
+              <Icon name="image" size={16} /> Memories <span className="muted small">{memories.length || ""}</span>
+            </h2>
+            {onCamera && (
+              <button className="btn ghost small" onClick={onCamera}>
+                <Icon name="camera" size={14} /> Camera
+              </button>
+            )}
+          </header>
+          {memories.length ? (
+            <div className="mem-grid board-mem">
+              {memories.slice(0, 12).map((m, i) => (
+                <Tile key={m.id} m={m} onOpen={() => onOpenMemory(i)} />
+              ))}
+            </div>
+          ) : (
+            <div className="empty">
+              <p>Photos, videos and files you add to this trip show here — attach them in the chat (📎), drop them in Memories, or open the camera.</p>
+            </div>
+          )}
+          {memories.length > 12 && <p className="muted small" style={{ marginTop: 8 }}>+{memories.length - 12} more in Memories</p>}
+        </section>
 
         <Card icon="wallet" title="Budget" className="budget">
           {budget ? (

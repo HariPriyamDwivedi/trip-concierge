@@ -27,6 +27,12 @@ class OAuthConfig:
     auth_endpoint: str = "https://accounts.google.com/o/oauth2/v2/auth"
     token_endpoint: str = "https://oauth2.googleapis.com/token"
     scope: str = "https://www.googleapis.com/auth/calendar.readonly"
+    # Google needs prompt=consent + access_type=offline to return a refresh token.
+    # Microsoft must NOT get prompt=consent: it forces a consent screen, which tenants
+    # that disallow user consent turn into "Approval required" even when an admin
+    # already approved the app (it returns refresh tokens via offline_access instead).
+    prompt: str | None = "consent"
+    access_type: str | None = "offline"
 
     @classmethod
     def from_env(cls) -> "OAuthConfig":
@@ -46,9 +52,11 @@ def build_authorization_url(config: OAuthConfig, state: str) -> str:
         "response_type": "code",
         "scope": config.scope,
         "state": state,
-        "access_type": "offline",
-        "prompt": "consent",
     }
+    if config.access_type:
+        params["access_type"] = config.access_type
+    if config.prompt:
+        params["prompt"] = config.prompt
     return f"{config.auth_endpoint}?{urllib.parse.urlencode(params)}"
 
 

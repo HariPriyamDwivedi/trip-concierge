@@ -18,9 +18,9 @@ def test_defaults_to_in_memory(monkeypatch):
 
 def test_session_for_is_idempotent():
     runner = ConciergeRunner(InMemorySessionService())
-    first = asyncio.run(runner._session_for("web-abc"))
-    again = asyncio.run(runner._session_for("web-abc"))
-    assert first == again == "web-abc"
+    first = asyncio.run(runner._session_for("u1", "trip-abc"))
+    again = asyncio.run(runner._session_for("u1", "trip-abc"))
+    assert first == again == "trip-abc"
 
 
 def test_session_survives_new_runner(tmp_path):
@@ -28,12 +28,12 @@ def test_session_survives_new_runner(tmp_path):
     url = f"sqlite+aiosqlite:///{tmp_path / 'sessions.db'}"
 
     async def scenario():
-        await ConciergeRunner(make_session_service(url))._session_for("web-abc")
+        await ConciergeRunner(make_session_service(url))._session_for("u1", "trip-abc")
         # A second runner on the same database = the web app after a restart.
         fresh = make_session_service(url)
-        await ConciergeRunner(fresh)._session_for("web-abc")  # must not re-create
-        found = await fresh.get_session(app_name=APP, user_id="web-abc", session_id="web-abc")
-        listed = await fresh.list_sessions(app_name=APP, user_id="web-abc")
+        await ConciergeRunner(fresh)._session_for("u1", "trip-abc")  # must not re-create
+        found = await fresh.get_session(app_name=APP, user_id="u1", session_id="trip-abc")
+        listed = await fresh.list_sessions(app_name=APP, user_id="u1")
         return found, listed
 
     found, listed = asyncio.run(scenario())
